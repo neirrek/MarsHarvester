@@ -44,7 +44,7 @@ public class Harvester {
     private int nbImages;
 
     public Harvester() {
-        initializeDriver();
+        initializeDriverAndPagination();
     }
 
     public static void main(String[] args) {
@@ -52,7 +52,6 @@ public class Harvester {
     }
 
     private void execute() {
-        paginationInput = driver.findElement(By.id("header_pagination"));
         int nbPages = Integer.parseInt(paginationInput.getAttribute("max"));
         boolean done = false;
         for (int p = 1; p <= nbPages && !done; p++) {
@@ -60,8 +59,7 @@ public class Harvester {
             if (!done) {
                 // The driver is re-initialized between each page
                 // to avoid it being stuck after a few pages
-                initializeDriver();
-                paginationInput = driver.findElement(By.id("header_pagination"));
+                initializeDriverAndPagination();
             }
         }
         driver.quit();
@@ -92,13 +90,14 @@ public class Harvester {
         return done;
     }
 
-    private void initializeDriver() {
+    private void initializeDriverAndPagination() {
         if (driver != null) {
             driver.quit();
         }
         driver = new JBrowserDriver(DRIVER_SETTINGS);
         driver.get(Config.rawImagesUrl());
         driver.pageWait();
+        paginationInput = driver.findElement(By.id("header_pagination"));
     }
 
     private boolean downloadImage(String imageUrl) {
