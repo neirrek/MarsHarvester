@@ -2,6 +2,7 @@ package com.neirrek.perseverance;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
@@ -38,38 +39,24 @@ public class Harvester {
 
     private JBrowserDriver driver;
 
+    private WebElement paginationInput;
+
+    private int nbImages;
+
     public Harvester() {
         initializeDriver();
     }
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         new Harvester().execute();
     }
 
-    private void execute() throws Exception {
-        WebElement paginationInput = driver.findElement(By.id("header_pagination"));
+    private void execute() {
+        paginationInput = driver.findElement(By.id("header_pagination"));
         int nbPages = Integer.parseInt(paginationInput.getAttribute("max"));
-        int nbImages = 0;
         boolean done = false;
         for (int p = 1; p <= nbPages && !done; p++) {
-            printStartPage(p, nbPages);
-            done = true;
-            paginationInput.clear();
-            paginationInput.sendKeys(String.valueOf(p));
-            driver.pageWait();
-            List<WebElement> thumbnails = driver.findElements(By.className("raw_list_image_inner"));
-            for (WebElement thumbnail : thumbnails) {
-                String imageUrl = StringUtils.replace(thumbnail.findElement(By.tagName("img")).getAttribute("src"),
-                        "_320.jpg", ".png");
-                if (saveImage(imageUrl)) {
-                    done = false;
-                    nbImages++;
-                }
-            }
-            if (done) {
-                logger.info("Page already fully downloaded!");
-            }
-            printEndPage(p, nbPages);
+            done = processPage(p, nbPages);
             if (!done) {
                 // The driver is re-initialized between each page
                 // to avoid it being stuck after a few pages
@@ -83,6 +70,28 @@ public class Harvester {
         }
     }
 
+    private boolean processPage(int page, int nbPages) {
+        boolean done = true;
+        printStartPage(page, nbPages);
+        paginationInput.clear();
+        paginationInput.sendKeys(String.valueOf(page));
+        driver.pageWait();
+        List<WebElement> thumbnails = driver.findElements(By.className("raw_list_image_inner"));
+        for (WebElement thumbnail : thumbnails) {
+            String imageUrl = StringUtils.replace(thumbnail.findElement(By.tagName("img")).getAttribute("src"),
+                    "_320.jpg", ".png");
+            if (downloadImage(imageUrl)) {
+                done = false;
+                nbImages++;
+            }
+        }
+        if (done) {
+            logger.info("Page already fully downloaded!");
+        }
+        printEndPage(page, nbPages);
+        return done;
+    }
+
     private void initializeDriver() {
         if (driver != null) {
             driver.quit();
@@ -92,21 +101,25 @@ public class Harvester {
         driver.pageWait();
     }
 
-    private boolean saveImage(String imageUrl) throws Exception {
+    private boolean downloadImage(String imageUrl) {
         String imagePath = String.format("%s/%s", Config.saveRootDirectory(),
                 RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
         File file = new File(imagePath);
         boolean downloaded = false;
         if (!file.exists()) {
-            FileUtils.forceMkdirParent(file);
-            InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
-                    .bodyStream();
-            try (FileOutputStream out = new FileOutputStream(file)) {
-                logger.info(imageUrl);
-                IOUtils.copy(bodyStream, out);
-                downloaded = true;
-            } finally {
-                bodyStream.close();
+            try {
+                FileUtils.forceMkdirParent(file);
+                InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
+                        .bodyStream();
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    logger.info(imageUrl);
+                    IOUtils.copy(bodyStream, out);
+                    downloaded = true;
+                } finally {
+                    bodyStream.close();
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(String.format("An error occurred while downloading image %s", imageUrl), e);
             }
         }
         return downloaded;
