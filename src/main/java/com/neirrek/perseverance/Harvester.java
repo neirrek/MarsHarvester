@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
+import javax.inject.Inject;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RegExUtils;
@@ -20,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
+import com.github.rvesse.airline.HelpOption;
 import com.github.rvesse.airline.SingleCommand;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
@@ -28,7 +31,7 @@ import com.machinepublishers.jbrowserdriver.Settings;
 import com.machinepublishers.jbrowserdriver.Timezone;
 import com.machinepublishers.jbrowserdriver.UserAgent;
 
-@Command(name = "perseverance-harvester", description = "PerseveranceHarvester command")
+@Command(name = "perseverance-harvester", description = "Perseverance raw images harvester command")
 public class Harvester {
 
     private static final Settings DRIVER_SETTINGS = Settings.builder().screen(new Dimension(1920, 1080))
@@ -41,11 +44,17 @@ public class Harvester {
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
 
+    @Inject
+    private HelpOption<Harvester> help;
+
     @Option(name = { "-f", "--fromPage" }, description = "Harvesting starts from this page")
     private int fromPage = 1;
 
     @Option(name = { "-t", "--toPage" }, description = "Harvesting stops at this page")
     private int toPage = Integer.MAX_VALUE;
+
+    @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
+    private boolean force;
 
     private JBrowserDriver driver;
 
@@ -53,17 +62,16 @@ public class Harvester {
 
     private int nbImages;
 
-    public Harvester() {
-        initializeDriverAndPagination();
-    }
-
     public static void main(String[] args) {
         SingleCommand<Harvester> parser = SingleCommand.singleCommand(Harvester.class);
         Harvester cmd = parser.parse(args);
-        cmd.execute();
+        if (!cmd.showHelp()) {
+            cmd.execute();
+        }
     }
 
     public void execute() {
+        initializeDriverAndPagination();
         int maxPage = Math.min(Integer.parseInt(paginationInput.getAttribute("max")), toPage);
         boolean done = false;
         for (int p = fromPage; p <= maxPage && !done; p++) {
@@ -117,7 +125,7 @@ public class Harvester {
                 RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
         File file = new File(imagePath);
         boolean downloaded = false;
-        if (!file.exists()) {
+        if (!file.exists() || force) {
             try {
                 FileUtils.forceMkdirParent(file);
                 InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
@@ -150,6 +158,10 @@ public class Harvester {
                     StringUtils.capitalize(pagePart.name().toLowerCase()), page, nbPages), 146, "=");
             logger.info(message);
         }
+    }
+
+    private boolean showHelp() {
+        return help.showHelpIfRequested();
     }
 
     private enum PagePart {
