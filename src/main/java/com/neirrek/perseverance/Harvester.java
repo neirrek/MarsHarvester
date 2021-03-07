@@ -32,8 +32,8 @@ import com.machinepublishers.jbrowserdriver.UserAgent;
 public class Harvester {
 
     private static final Settings DRIVER_SETTINGS = Settings.builder().screen(new Dimension(1920, 1080))
-            .timezone(Timezone.EUROPE_PARIS)/* .quickRender(true) */.headless(true).userAgent(UserAgent.CHROME)
-            .ajaxWait(300).loggerLevel(Level.OFF).build();
+            .timezone(Timezone.EUROPE_PARIS).quickRender(true).headless(true).userAgent(UserAgent.CHROME).ajaxWait(300)
+            .loggerLevel(Level.OFF).build();
 
     private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-z]+)\\/browse\\/([a-z]+)\\/(.+)$";
 
