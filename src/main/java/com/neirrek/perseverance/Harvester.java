@@ -5,7 +5,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Level;
 
 import javax.inject.Inject;
@@ -20,7 +19,6 @@ import org.openqa.selenium.Dimension;
 import org.openqa.selenium.WebElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yaml.snakeyaml.Yaml;
 
 import com.github.rvesse.airline.HelpOption;
 import com.github.rvesse.airline.SingleCommand;
@@ -34,6 +32,8 @@ import com.machinepublishers.jbrowserdriver.UserAgent;
 @Command(name = "perseverance-harvester", description = "Perseverance raw images harvester command")
 public class Harvester {
 
+    private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
+
     private static final Settings DRIVER_SETTINGS = Settings.builder().screen(new Dimension(1920, 1080))
             .timezone(Timezone.EUROPE_PARIS).quickRender(true).headless(true).userAgent(UserAgent.CHROME).ajaxWait(300)
             .loggerLevel(Level.OFF).build();
@@ -44,8 +44,8 @@ public class Harvester {
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
 
-    @Inject
-    private HelpOption<Harvester> help;
+    @Option(name = { "-d", "--dir" }, description = "Root directory in which the images are saved")
+    private String saveRootDirectory;
 
     @Option(name = { "-f", "--fromPage" }, description = "Harvesting starts from this page")
     private int fromPage = 1;
@@ -55,6 +55,9 @@ public class Harvester {
 
     @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
     private boolean force;
+
+    @Inject
+    private HelpOption<Harvester> help;
 
     private JBrowserDriver driver;
 
@@ -115,13 +118,13 @@ public class Harvester {
             driver.quit();
         }
         driver = new JBrowserDriver(DRIVER_SETTINGS);
-        driver.get(Config.rawImagesUrl());
+        driver.get(RAW_IMAGES_URL);
         driver.pageWait();
         paginationInput = driver.findElement(By.id("header_pagination"));
     }
 
     private boolean downloadImage(String imageUrl) {
-        String imagePath = String.format("%s/%s", Config.saveRootDirectory(),
+        String imagePath = String.format("%s/%s", saveRootDirectory,
                 RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
         File file = new File(imagePath);
         boolean downloaded = false;
@@ -166,30 +169,6 @@ public class Harvester {
 
     private enum PagePart {
         START, END;
-    }
-
-    private static class Config {
-
-        private static Map<String, String> values;
-
-        static {
-            load();
-        }
-
-        static String rawImagesUrl() {
-            return values.get("rawImagesUrl");
-        }
-
-        static String saveRootDirectory() {
-            return values.get("saveRootDirectory");
-        }
-
-        private static void load() {
-            Yaml yaml = new Yaml();
-            InputStream inputStream = Config.class.getClassLoader().getResourceAsStream("config.yml");
-            values = yaml.load(inputStream);
-        }
-
     }
 
 }

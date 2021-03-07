@@ -2,14 +2,41 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.neirrek</groupId>
     <artifactId>perseverance-harvester</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
     <name>PerseveranceHarvester</name>
     <description>Mars Perseverance images harvester</description>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
     	
     <properties>
         <maven.compiler.target>1.8</maven.compiler.target>
         <maven.compiler.source>1.8</maven.compiler.source>
     </properties>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadedArtifactAttached>false</shadedArtifactAttached>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.neirrek.perseverance.Harvester</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
     
     <dependencies>
         <dependency>

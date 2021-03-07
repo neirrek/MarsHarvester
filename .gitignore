@@ -19,3 +19,4 @@
 .settings
 target
 *.bak
+dependency-reduced-pom.xml
