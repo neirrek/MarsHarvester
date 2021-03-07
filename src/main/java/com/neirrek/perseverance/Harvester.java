@@ -164,7 +164,12 @@ public class Harvester {
     }
 
     private boolean showHelp() {
-        return help.showHelpIfRequested();
+        boolean helpShown = help.showHelpIfRequested();
+        if (!helpShown && saveRootDirectory == null) {
+            help.showHelp();
+            helpShown = true;
+        }
+        return helpShown;
     }
 
     private enum PagePart {
