@@ -124,7 +124,7 @@ public class Harvester {
     }
 
     private boolean downloadImage(String imageUrl) {
-        String imagePath = String.format("%s/%s", saveRootDirectory,
+        String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
                 RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
         File file = new File(imagePath);
         boolean downloaded = false;
