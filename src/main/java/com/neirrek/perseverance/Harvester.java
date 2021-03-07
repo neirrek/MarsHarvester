@@ -113,16 +113,6 @@ public class Harvester {
         return done;
     }
 
-    private void initializeDriverAndPagination() {
-        if (driver != null) {
-            driver.quit();
-        }
-        driver = new JBrowserDriver(DRIVER_SETTINGS);
-        driver.get(RAW_IMAGES_URL);
-        driver.pageWait();
-        paginationInput = driver.findElement(By.id("header_pagination"));
-    }
-
     private boolean downloadImage(String imageUrl) {
         String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
                 RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
@@ -145,6 +135,16 @@ public class Harvester {
             }
         }
         return downloaded;
+    }
+
+    private void initializeDriverAndPagination() {
+        if (driver != null) {
+            driver.quit();
+        }
+        driver = new JBrowserDriver(DRIVER_SETTINGS);
+        driver.get(RAW_IMAGES_URL);
+        driver.pageWait();
+        paginationInput = driver.findElement(By.id("header_pagination"));
     }
 
     private void printStartPage(int page, int nbPages) {
