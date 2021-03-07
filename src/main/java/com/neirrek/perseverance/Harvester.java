@@ -73,7 +73,7 @@ public class Harvester {
         }
     }
 
-    public void execute() {
+    private void execute() {
         initializeDriverAndPagination();
         int maxPage = Math.min(Integer.parseInt(paginationInput.getAttribute("max")), toPage);
         boolean done = false;
