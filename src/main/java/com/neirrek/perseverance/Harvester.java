@@ -20,22 +20,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
+import com.github.rvesse.airline.SingleCommand;
+import com.github.rvesse.airline.annotations.Command;
+import com.github.rvesse.airline.annotations.Option;
 import com.machinepublishers.jbrowserdriver.JBrowserDriver;
 import com.machinepublishers.jbrowserdriver.Settings;
 import com.machinepublishers.jbrowserdriver.Timezone;
 import com.machinepublishers.jbrowserdriver.UserAgent;
 
+@Command(name = "perseverance-harvester", description = "PerseveranceHarvester command")
 public class Harvester {
 
     private static final Settings DRIVER_SETTINGS = Settings.builder().screen(new Dimension(1920, 1080))
-            .timezone(Timezone.EUROPE_PARIS).quickRender(true).headless(true).userAgent(UserAgent.CHROME)
-            .loggerLevel(Level.OFF).build();
+            .timezone(Timezone.EUROPE_PARIS)/* .quickRender(true) */.headless(true).userAgent(UserAgent.CHROME)
+            .ajaxWait(300).loggerLevel(Level.OFF).build();
 
     private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-z]+)\\/browse\\/([a-z]+)\\/(.+)$";
 
     private static final String IMAGE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4";
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
+
+    @Option(name = { "-f", "--fromPage" }, description = "Harvesting starts from this page")
+    private int fromPage = 1;
+
+    @Option(name = { "-t", "--toPage" }, description = "Harvesting stops at this page")
+    private int toPage = Integer.MAX_VALUE;
 
     private JBrowserDriver driver;
 
@@ -48,14 +58,16 @@ public class Harvester {
     }
 
     public static void main(String[] args) {
-        new Harvester().execute();
+        SingleCommand<Harvester> parser = SingleCommand.singleCommand(Harvester.class);
+        Harvester cmd = parser.parse(args);
+        cmd.execute();
     }
 
-    private void execute() {
-        int nbPages = Integer.parseInt(paginationInput.getAttribute("max"));
+    public void execute() {
+        int maxPage = Math.min(Integer.parseInt(paginationInput.getAttribute("max")), toPage);
         boolean done = false;
-        for (int p = 1; p <= nbPages && !done; p++) {
-            done = processPage(p, nbPages);
+        for (int p = fromPage; p <= maxPage && !done; p++) {
+            done = processPage(p, maxPage);
             if (!done) {
                 // The driver is re-initialized between each page
                 // to avoid it being stuck after a few pages

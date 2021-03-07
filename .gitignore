@@ -16,5 +16,6 @@
 # Misc.
 .classpath
 .project
+.settings
 target
 *.bak
