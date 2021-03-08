@@ -17,7 +17,7 @@ Executing
 ---------
 Launch the harvester by executing the following command:
 ```
-java -jar perseverance-harvester-X.Y.Z.jar -d /path/to/save/root/dir
+java -jar perseverance-harvester-x.y.z.jar -d /path/to/save/root/dir
 ```
 
 Usage
