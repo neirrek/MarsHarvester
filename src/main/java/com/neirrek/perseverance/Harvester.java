@@ -2,10 +2,16 @@ package com.neirrek.perseverance;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
@@ -31,6 +37,8 @@ import com.machinepublishers.jbrowserdriver.UserAgent;
 
 @Command(name = "perseverance-harvester", description = "Perseverance raw images harvester command")
 public class Harvester {
+
+    private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
 
     private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
 
@@ -60,14 +68,19 @@ public class Harvester {
     @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
     private boolean force;
 
+    @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 4)")
+    private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
+
     @Inject
     private HelpOption<Harvester> help;
+
+    private CompletionService<Boolean> downloadImageService;
 
     private JBrowserDriver driver;
 
     private WebElement paginationInput;
 
-    private int nbDownloadedImages;
+    private AtomicInteger nbDownloadedImages = new AtomicInteger(0);
 
     public static void main(String[] args) {
         SingleCommand<Harvester> parser = SingleCommand.singleCommand(Harvester.class);
@@ -79,6 +92,7 @@ public class Harvester {
 
     private void execute() {
         initializeDriverAndPagination();
+        downloadImageService = new ExecutorCompletionService<>(Executors.newFixedThreadPool(downloadThreadsNumber));
         int maxPage = Math.min(getNumberOfPages(), toPage);
         boolean done = false;
         for (int p = fromPage; p <= maxPage && !done; p++) {
@@ -98,39 +112,25 @@ public class Harvester {
     private boolean processPage(int page, int nbPages) {
         logStartPage(page, nbPages);
         goToPage(page);
-        boolean alreadyDone = getThumbnailsElementsStream()
-                .map(t -> StringUtils.replace(t.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
-                .map(this::downloadImage).noneMatch(Boolean::booleanValue);
+        List<String> imagesUrls = getImagesUrls();
+        for (String imageUrl : imagesUrls) {
+            downloadImageService.submit(new DownloadImageCallable(imageUrl));
+        }
+        boolean alreadyDone = true;
+        try {
+            for (int i = 0; i < imagesUrls.size(); i++) {
+                alreadyDone &= !downloadImageService.take().get();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException e) {
+            throw new RuntimeException(String.format("An error occurred while downloding page %s", page), e.getCause());
+        }
         if (alreadyDone) {
             logger.info("Page already fully downloaded!");
         }
         printEndPage(page, nbPages);
         return alreadyDone;
-    }
-
-    private boolean downloadImage(String imageUrl) {
-        String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
-                RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
-        File file = new File(imagePath);
-        boolean downloaded = false;
-        if (!file.exists() || force) {
-            try {
-                FileUtils.forceMkdirParent(file);
-                InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
-                        .bodyStream();
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    logger.info(imageUrl);
-                    IOUtils.copy(bodyStream, out);
-                    nbDownloadedImages++;
-                    downloaded = true;
-                } finally {
-                    bodyStream.close();
-                }
-            } catch (IOException e) {
-                throw new RuntimeException(String.format("An error occurred while downloading image %s", imageUrl), e);
-            }
-        }
-        return downloaded;
     }
 
     private void initializeDriverAndPagination() {
@@ -153,9 +153,11 @@ public class Harvester {
         driver.pageWait();
     }
 
-    private Stream<WebElement> getThumbnailsElementsStream() {
+    private List<String> getImagesUrls() {
         return driver.findElements(By.className("raw_list_image_inner")).stream()
-                .map(e -> e.findElement(By.tagName("img")));
+                .map(e -> e.findElement(By.tagName("img")))
+                .map(e -> StringUtils.replace(e.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
+                .collect(Collectors.toList());
     }
 
     private void logStartPage(int page, int nbPages) {
@@ -169,7 +171,7 @@ public class Harvester {
     private void logPagePart(PagePart pagePart, int page, int nbPages) {
         if (logger.isInfoEnabled()) {
             String message = StringUtils.rightPad(String.format("====[%s of page %s/%s]",
-                    StringUtils.capitalize(pagePart.name().toLowerCase()), page, nbPages), 146, "=");
+                    StringUtils.capitalize(pagePart.name().toLowerCase()), page, nbPages), 148, "=");
             logger.info(message);
         }
     }
@@ -181,6 +183,41 @@ public class Harvester {
             helpShown = true;
         }
         return helpShown;
+    }
+
+    private class DownloadImageCallable implements Callable<Boolean> {
+
+        private String imageUrl;
+
+        public DownloadImageCallable(String imageUrl) {
+            this.imageUrl = imageUrl;
+        }
+
+        @Override
+        public Boolean call() throws Exception {
+            String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
+                    RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
+            File file = new File(imagePath);
+            boolean downloaded = false;
+            boolean toDownload = !file.exists();
+            if (logger.isInfoEnabled()) {
+                logger.info(String.format("%s %s", toDownload ? "*" : " ", imageUrl));
+            }
+            if (toDownload || force) {
+                FileUtils.forceMkdirParent(file);
+                InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
+                        .bodyStream();
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    IOUtils.copy(bodyStream, out);
+                    nbDownloadedImages.getAndIncrement();
+                    downloaded = true;
+                } finally {
+                    bodyStream.close();
+                }
+            }
+            return downloaded;
+        }
+
     }
 
     private enum PagePart {

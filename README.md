@@ -4,7 +4,7 @@ PerseveranceHarvester
 
 What is it?
 -----------
-**PerseveranceHarvester** is a Mars rover **Perseverance** raw images harvester. It is a **Java standalone program** that downloads the raw images taken by the Mars rover **Perseverance** that are available on the NASA website at the following URL: <https://mars.nasa.gov/mars2020/multimedia/raw-images/>
+**PerseveranceHarvester** is a **Java standalone program** that downloads the raw images taken by the Mars rover **Perseverance** that are available on the **NASA** website at the following URL: <https://mars.nasa.gov/mars2020/multimedia/raw-images/>
 
 Packaging
 ---------
@@ -30,6 +30,7 @@ SYNOPSIS
         perseverance-harvester [ {-d | --dir} <saveRootDirectory> ]
                 [ {-f | --fromPage} <fromPage> ] [ --force ] [ {-h | --help} ]
                 [ {-t | --toPage} <toPage> ]
+                [ --threads <downloadThreadsNumber> ]
 
 OPTIONS
         -d <saveRootDirectory>, --dir <saveRootDirectory>
@@ -46,4 +47,7 @@ OPTIONS
 
         -t <toPage>, --toPage <toPage>
             Harvesting stops at this page
+
+        --threads <downloadThreadsNumber>
+            Number of threads to download the images (default is 4)
 ```
