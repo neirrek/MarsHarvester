@@ -63,7 +63,7 @@ public class Harvester {
 
     private WebElement paginationInput;
 
-    private int nbImages;
+    private int nbDownloadedImages;
 
     public static void main(String[] args) {
         SingleCommand<Harvester> parser = SingleCommand.singleCommand(Harvester.class);
@@ -87,7 +87,7 @@ public class Harvester {
         }
         driver.quit();
         if (logger.isInfoEnabled()) {
-            logger.info(String.format("%s images downloaded", nbImages));
+            logger.info(String.format("%s images downloaded", nbDownloadedImages));
         }
     }
 
@@ -95,8 +95,9 @@ public class Harvester {
         logStartPage(page, nbPages);
         goToPage(page);
         boolean alreadyDone = getThumbnailsElementsStream()
-                .map(t -> StringUtils.replace(t.findElement(By.tagName("img")).getAttribute("src"), "_320.jpg", ".png"))
-                .map(this::downloadImage).noneMatch(Boolean::booleanValue);
+                .map(t -> StringUtils.replace(t.getAttribute("src"), "_320.jpg", ".png"))
+                .map(this::downloadImage)
+                .noneMatch(Boolean::booleanValue);
         if (alreadyDone) {
             logger.info("Page already fully downloaded!");
         }
@@ -117,7 +118,7 @@ public class Harvester {
                 try (FileOutputStream out = new FileOutputStream(file)) {
                     logger.info(imageUrl);
                     IOUtils.copy(bodyStream, out);
-                    nbImages++;
+                    nbDownloadedImages++;
                     downloaded = true;
                 } finally {
                     bodyStream.close();
@@ -150,7 +151,8 @@ public class Harvester {
     }
 
     private Stream<WebElement> getThumbnailsElementsStream() {
-        return driver.findElements(By.className("raw_list_image_inner")).stream();
+        return driver.findElements(By.className("raw_list_image_inner")).stream()
+                .map(e -> e.findElement(By.tagName("img")));
     }
 
     private void logStartPage(int page, int nbPages) {
