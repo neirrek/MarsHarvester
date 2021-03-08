@@ -200,11 +200,11 @@ public class Harvester {
                     RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
             File file = new File(imagePath);
             boolean downloaded = false;
-            boolean toDownload = !file.exists();
+            boolean toDownload = !file.exists() || force;
             if (logger.isInfoEnabled()) {
                 logger.info(String.format("%s %s", toDownload ? "*" : " ", imageUrl));
             }
-            if (toDownload || force) {
+            if (toDownload) {
                 FileUtils.forceMkdirParent(file);
                 InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
                         .bodyStream();
