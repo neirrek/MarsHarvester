@@ -1,6 +1,6 @@
 PerseveranceHarvester
 =====================
-![Perseverance](https://i.imgur.com/Hkr0AKU.png "Image Credit: NASA/JPL-Caltech")
+![Perseverance](https://i.imgur.com/3BWaSgI.png "Image Credit: NASA/JPL-Caltech")
 
 What is it?
 -----------
