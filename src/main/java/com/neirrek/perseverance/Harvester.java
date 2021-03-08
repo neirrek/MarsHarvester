@@ -71,9 +71,9 @@ public class Harvester {
 
     public static void main(String[] args) {
         SingleCommand<Harvester> parser = SingleCommand.singleCommand(Harvester.class);
-        Harvester cmd = parser.parse(args);
-        if (!cmd.showHelp()) {
-            cmd.execute();
+        Harvester harvester = parser.parse(args);
+        if (!harvester.showHelp()) {
+            harvester.execute();
         }
     }
 
