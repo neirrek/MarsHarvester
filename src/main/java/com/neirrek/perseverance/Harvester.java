@@ -124,7 +124,8 @@ public class Harvester {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException e) {
-            throw new RuntimeException(String.format("An error occurred while downloding page %s", page), e.getCause());
+            throw new RuntimeException(String.format("An error occurred while downloading page %s", page),
+                    e.getCause());
         }
         if (alreadyDone) {
             logger.info("Page already fully downloaded!");
