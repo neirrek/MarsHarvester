@@ -42,6 +42,10 @@ public class Harvester {
 
     private static final String IMAGE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4";
 
+    private static final String THUMBNAIL_IMAGES_SUFFIX = "_320.jpg";
+
+    private static final String LARGE_IMAGES_SUFFIX = ".png";
+
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
 
     @Option(name = { "-d", "--dir" }, description = "Root directory in which the images are saved")
@@ -95,9 +99,8 @@ public class Harvester {
         logStartPage(page, nbPages);
         goToPage(page);
         boolean alreadyDone = getThumbnailsElementsStream()
-                .map(t -> StringUtils.replace(t.getAttribute("src"), "_320.jpg", ".png"))
-                .map(this::downloadImage)
-                .noneMatch(Boolean::booleanValue);
+                .map(t -> StringUtils.replace(t.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
+                .map(this::downloadImage).noneMatch(Boolean::booleanValue);
         if (alreadyDone) {
             logger.info("Page already fully downloaded!");
         }
