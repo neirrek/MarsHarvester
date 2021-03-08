@@ -4,8 +4,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.List;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 
 import javax.inject.Inject;
 
@@ -75,7 +75,7 @@ public class Harvester {
 
     private void execute() {
         initializeDriverAndPagination();
-        int maxPage = Math.min(Integer.parseInt(paginationInput.getAttribute("max")), toPage);
+        int maxPage = Math.min(getNumberOfPages(), toPage);
         boolean done = false;
         for (int p = fromPage; p <= maxPage && !done; p++) {
             done = processPage(p, maxPage);
@@ -92,25 +92,16 @@ public class Harvester {
     }
 
     private boolean processPage(int page, int nbPages) {
-        boolean done = true;
-        printStartPage(page, nbPages);
-        paginationInput.clear();
-        paginationInput.sendKeys(String.valueOf(page));
-        driver.pageWait();
-        List<WebElement> thumbnails = driver.findElements(By.className("raw_list_image_inner"));
-        for (WebElement thumbnail : thumbnails) {
-            String imageUrl = StringUtils.replace(thumbnail.findElement(By.tagName("img")).getAttribute("src"),
-                    "_320.jpg", ".png");
-            if (downloadImage(imageUrl)) {
-                done = false;
-                nbImages++;
-            }
-        }
-        if (done) {
+        logStartPage(page, nbPages);
+        goToPage(page);
+        boolean alreadyDone = getThumbnailsElementsStream()
+                .map(t -> StringUtils.replace(t.findElement(By.tagName("img")).getAttribute("src"), "_320.jpg", ".png"))
+                .map(this::downloadImage).noneMatch(Boolean::booleanValue);
+        if (alreadyDone) {
             logger.info("Page already fully downloaded!");
         }
         printEndPage(page, nbPages);
-        return done;
+        return alreadyDone;
     }
 
     private boolean downloadImage(String imageUrl) {
@@ -126,6 +117,7 @@ public class Harvester {
                 try (FileOutputStream out = new FileOutputStream(file)) {
                     logger.info(imageUrl);
                     IOUtils.copy(bodyStream, out);
+                    nbImages++;
                     downloaded = true;
                 } finally {
                     bodyStream.close();
@@ -147,15 +139,29 @@ public class Harvester {
         paginationInput = driver.findElement(By.id("header_pagination"));
     }
 
-    private void printStartPage(int page, int nbPages) {
-        printPagePart(PagePart.START, page, nbPages);
+    private int getNumberOfPages() {
+        return Integer.parseInt(paginationInput.getAttribute("max"));
+    }
+
+    private void goToPage(int page) {
+        paginationInput.clear();
+        paginationInput.sendKeys(String.valueOf(page));
+        driver.pageWait();
+    }
+
+    private Stream<WebElement> getThumbnailsElementsStream() {
+        return driver.findElements(By.className("raw_list_image_inner")).stream();
+    }
+
+    private void logStartPage(int page, int nbPages) {
+        logPagePart(PagePart.START, page, nbPages);
     }
 
     private void printEndPage(int page, int nbPages) {
-        printPagePart(PagePart.END, page, nbPages);
+        logPagePart(PagePart.END, page, nbPages);
     }
 
-    private void printPagePart(PagePart pagePart, int page, int nbPages) {
+    private void logPagePart(PagePart pagePart, int page, int nbPages) {
         if (logger.isInfoEnabled()) {
             String message = StringUtils.rightPad(String.format("====[%s of page %s/%s]",
                     StringUtils.capitalize(pagePart.name().toLowerCase()), page, nbPages), 146, "=");
