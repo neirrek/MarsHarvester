@@ -8,6 +8,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -74,6 +75,8 @@ public class Harvester {
     @Inject
     private HelpOption<Harvester> help;
 
+    private ExecutorService executorService;
+
     private CompletionService<Boolean> downloadImageService;
 
     private JBrowserDriver driver;
@@ -92,7 +95,8 @@ public class Harvester {
 
     private void execute() {
         initializeDriverAndPagination();
-        downloadImageService = new ExecutorCompletionService<>(Executors.newFixedThreadPool(downloadThreadsNumber));
+        executorService = Executors.newFixedThreadPool(downloadThreadsNumber);
+        downloadImageService = new ExecutorCompletionService<>(executorService);
         int maxPage = Math.min(getNumberOfPages(), toPage);
         boolean done = false;
         for (int p = fromPage; p <= maxPage && !done; p++) {
@@ -107,6 +111,7 @@ public class Harvester {
         if (logger.isInfoEnabled()) {
             logger.info(String.format("%s images downloaded", nbDownloadedImages));
         }
+        executorService.shutdown();
     }
 
     private boolean processPage(int page, int nbPages) {
