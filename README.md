@@ -29,6 +29,7 @@ NAME
 SYNOPSIS
         perseverance-harvester [ {-d | --dir} <saveRootDirectory> ]
                 [ {-f | --fromPage} <fromPage> ] [ --force ] [ {-h | --help} ]
+                [ --stop-at-already-downloaded-page ]
                 [ {-t | --toPage} <toPage> ]
                 [ --threads <downloadThreadsNumber> ]
 
@@ -44,6 +45,10 @@ OPTIONS
 
         -h, --help
             Display help information
+
+        --stop-at-already-downloaded-page
+            Harvesting stops at the first page which is already fully
+            downloaded
 
         -t <toPage>, --toPage <toPage>
             Harvesting stops at this page

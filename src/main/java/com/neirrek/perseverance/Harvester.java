@@ -2,14 +2,19 @@ package com.neirrek.perseverance;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.text.NumberFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -22,8 +27,13 @@ import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.openqa.selenium.By;
-import org.openqa.selenium.Dimension;
+import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.firefox.FirefoxOptions;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,21 +41,15 @@ import com.github.rvesse.airline.HelpOption;
 import com.github.rvesse.airline.SingleCommand;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
-import com.machinepublishers.jbrowserdriver.JBrowserDriver;
-import com.machinepublishers.jbrowserdriver.Settings;
-import com.machinepublishers.jbrowserdriver.Timezone;
-import com.machinepublishers.jbrowserdriver.UserAgent;
 
 @Command(name = "perseverance-harvester", description = "Perseverance raw images harvester command")
 public class Harvester {
 
+    private static final String GECKO_DRIVER_PATH_PROPERTY = "webdriver.gecko.driver";
+
     private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
 
     private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
-
-    private static final Settings DRIVER_SETTINGS = Settings.builder().screen(new Dimension(1920, 1080))
-            .timezone(Timezone.EUROPE_PARIS).quickRender(true).headless(true).userAgent(UserAgent.CHROME).ajaxWait(300)
-            .loggerLevel(Level.OFF).build();
 
     private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-z]+)\\/browse\\/([a-z]+)\\/(.+)$";
 
@@ -54,6 +58,16 @@ public class Harvester {
     private static final String THUMBNAIL_IMAGES_SUFFIX = "_320.jpg";
 
     private static final String LARGE_IMAGES_SUFFIX = ".png";
+
+    static {
+        // Setting where the Gecko driver is on your system
+        System.setProperty(GECKO_DRIVER_PATH_PROPERTY,
+                System.getProperty(GECKO_DRIVER_PATH_PROPERTY, Config.getGeckoDriverPath()));
+        // Redirecting the browser logs to /dev/null
+        System.setProperty(FirefoxDriver.SystemProperty.BROWSER_LOGFILE, "/dev/null");
+        // And disabling the useless Selenium logs not to pollute the logs
+        java.util.logging.Logger.getLogger("org.openqa.selenium").setLevel(Level.OFF);
+    }
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
 
@@ -69,17 +83,19 @@ public class Harvester {
     @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
     private boolean force;
 
+    @Option(name = {
+            "--stop-at-already-downloaded-page" }, description = "Harvesting stops at the first page which is already fully downloaded")
+    private boolean stopAtAlreadyDownloadedPage;
+
     @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 4)")
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
 
     @Inject
     private HelpOption<Harvester> help;
 
-    private ExecutorService executorService;
-
     private CompletionService<Boolean> downloadImageService;
 
-    private JBrowserDriver driver;
+    private WebDriver driver;
 
     private WebElement paginationInput;
 
@@ -95,17 +111,12 @@ public class Harvester {
 
     private void execute() {
         initializeDriverAndPagination();
-        executorService = Executors.newFixedThreadPool(downloadThreadsNumber);
+        ExecutorService executorService = Executors.newFixedThreadPool(downloadThreadsNumber);
         downloadImageService = new ExecutorCompletionService<>(executorService);
         int maxPage = Math.min(getNumberOfPages(), toPage);
-        boolean done = false;
-        for (int p = fromPage; p <= maxPage && !done; p++) {
-            done = processPage(p, maxPage);
-            if (!done) {
-                // The driver is re-initialized between each page
-                // to avoid it being stuck after a few pages
-                initializeDriverAndPagination();
-            }
+        boolean stop = false;
+        for (int p = fromPage; p <= maxPage && !stop; p++) {
+            stop = processPage(p, maxPage) && stopAtAlreadyDownloadedPage;
         }
         driver.quit();
         if (logger.isInfoEnabled()) {
@@ -129,7 +140,7 @@ public class Harvester {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException e) {
-            throw new DownloadImageException(String.format("An error occurred while downloading page %s", page),
+            throw new HarvesterException(String.format("An error occurred while downloading page %s", page),
                     e.getCause());
         }
         if (alreadyDone) {
@@ -143,9 +154,11 @@ public class Harvester {
         if (driver != null) {
             driver.quit();
         }
-        driver = new JBrowserDriver(DRIVER_SETTINGS);
+        FirefoxOptions firefoxOptions = new FirefoxOptions();
+        firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
+        driver = new FirefoxDriver(firefoxOptions);
+        driver.manage().timeouts().implicitlyWait(5, TimeUnit.SECONDS);
         driver.get(RAW_IMAGES_URL);
-        driver.pageWait();
         paginationInput = driver.findElement(By.id("header_pagination"));
     }
 
@@ -154,9 +167,21 @@ public class Harvester {
     }
 
     private void goToPage(int page) {
-        paginationInput.clear();
-        paginationInput.sendKeys(String.valueOf(page));
-        driver.pageWait();
+        String startIndex = NumberFormat.getInstance(Locale.ENGLISH).format((page - 1) * 50 + 1L);
+        boolean ok = false;
+        int retry = 0;
+        while (!ok && retry < 10) {
+            paginationInput.clear();
+            paginationInput.sendKeys(String.valueOf(page));
+            try {
+                new WebDriverWait(driver, 10).until(
+                        ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
+                ok = true;
+            } catch (TimeoutException e) {
+                retry++;
+                logger.debug(e.getMessage(), e);
+            }
+        }
     }
 
     private List<String> getImagesUrls() {
@@ -226,18 +251,49 @@ public class Harvester {
 
     }
 
-    public static class DownloadImageException extends RuntimeException {
+    private enum PagePart {
+        START, END;
+    }
 
-        private static final long serialVersionUID = -1569660223288867827L;
+    private static class Config {
 
-        public DownloadImageException(String message, Throwable cause) {
-            super(message, cause);
+        private static Config instance;
+
+        private final Properties properties = new Properties();
+
+        private Config() {
+            try {
+                properties.load(ClassLoader.getSystemClassLoader().getResourceAsStream("config.properties"));
+            } catch (IOException | IllegalArgumentException | NullPointerException e) {
+                throw new HarvesterException("Unable to initialize de configuration", e);
+            }
+        }
+
+        private static Config getInstance() {
+            if (instance == null) {
+                instance = new Config();
+            }
+            return instance;
+        }
+
+        static String getGeckoDriverPath() {
+            return getInstance().getProperty(GECKO_DRIVER_PATH_PROPERTY);
+        }
+
+        private String getProperty(String propertyName) {
+            return properties.getProperty(propertyName);
         }
 
     }
 
-    private enum PagePart {
-        START, END;
+    public static class HarvesterException extends RuntimeException {
+
+        private static final long serialVersionUID = -1569660223288867827L;
+
+        public HarvesterException(String message, Throwable cause) {
+            super(message, cause);
+        }
+
     }
 
 }
