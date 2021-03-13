@@ -60,9 +60,12 @@ public class Harvester {
     private static final String LARGE_IMAGES_SUFFIX = ".png";
 
     static {
-        // Setting where the Gecko driver is on your system
-        System.setProperty(GECKO_DRIVER_PATH_PROPERTY,
-                System.getProperty(GECKO_DRIVER_PATH_PROPERTY, Config.getGeckoDriverPath()));
+        // If the JVM property "webdriver.gecko.driver", which defines
+        // the path to the Gecko driver on your system, is not set then
+        // setting it with the value defined in the config.properties file
+        if (System.getProperty(GECKO_DRIVER_PATH_PROPERTY, null) == null) {
+            System.setProperty(GECKO_DRIVER_PATH_PROPERTY, Config.getGeckoDriverPath());
+        }
         // Redirecting the browser logs to /dev/null
         System.setProperty(FirefoxDriver.SystemProperty.BROWSER_LOGFILE, "/dev/null");
         // And disabling the useless Selenium logs not to pollute the logs
