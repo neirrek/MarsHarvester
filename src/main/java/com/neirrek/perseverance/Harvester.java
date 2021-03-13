@@ -265,7 +265,7 @@ public class Harvester {
             try {
                 properties.load(ClassLoader.getSystemClassLoader().getResourceAsStream("config.properties"));
             } catch (IOException | IllegalArgumentException | NullPointerException e) {
-                throw new HarvesterException("Unable to initialize de configuration", e);
+                throw new HarvesterException("Unable to load the properties", e);
             }
         }
 
