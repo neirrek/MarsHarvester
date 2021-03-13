@@ -135,10 +135,10 @@ public class Harvester {
         for (String imageUrl : imagesUrls) {
             downloadImageService.submit(new DownloadImageCallable(imageUrl));
         }
-        boolean alreadyDone = true;
+        boolean oageAlreadyDownloaded = true;
         try {
             for (int i = 0; i < imagesUrls.size(); i++) {
-                alreadyDone &= !downloadImageService.take().get();
+                oageAlreadyDownloaded &= !downloadImageService.take().get();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -146,11 +146,11 @@ public class Harvester {
             throw new HarvesterException(String.format("An error occurred while downloading page %s", page),
                     e.getCause());
         }
-        if (alreadyDone) {
+        if (oageAlreadyDownloaded) {
             logger.info("Page already fully downloaded!");
         }
         printEndPage(page, nbPages);
-        return alreadyDone;
+        return oageAlreadyDownloaded;
     }
 
     private void initializeDriverAndPagination() {
