@@ -239,14 +239,23 @@ public class Harvester {
             }
             if (toDownload) {
                 FileUtils.forceMkdirParent(file);
-                InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
-                        .bodyStream();
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    IOUtils.copy(bodyStream, out);
-                    nbDownloadedImages.getAndIncrement();
-                    downloaded = true;
-                } finally {
-                    bodyStream.close();
+                boolean retry = false;
+                while (!downloaded) {
+                    if (retry && logger.isInfoEnabled()) {
+                        logger.info(String.format("%s %s", "!", imageUrl));
+                    }
+                    InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
+                            .bodyStream();
+                    try (FileOutputStream out = new FileOutputStream(file)) {
+                        IOUtils.copy(bodyStream, out);
+                        nbDownloadedImages.getAndIncrement();
+                        downloaded = true;
+                    } catch (IOException e) {
+                        retry = true;
+                    } finally {
+                        IOUtils.closeQuietly(bodyStream,
+                                e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
+                    }
                 }
             }
             return downloaded;
