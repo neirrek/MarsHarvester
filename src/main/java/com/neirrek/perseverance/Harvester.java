@@ -42,6 +42,42 @@ import com.github.rvesse.airline.SingleCommand;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
 
+/**
+ * <p>
+ * A class that downloads the raw images taken by the Mars rover Perseverance
+ * that are available on the NASA website at the following URL:
+ * https://mars.nasa.gov/mars2020/multimedia/raw-images
+ * </p>
+ * <p>
+ * This class can be executed as a command with the following parameters:
+ * 
+ * <pre>
+ *  -d [saveRootDirectory], --dir [saveRootDirectory]
+ *      Root directory in which the images are saved
+ *      
+ *  -f [fromPage], --fromPage [fromPage]
+ *      Harvesting starts from this page
+ *      
+ *  --force
+ *      Force harvesting already downloaded images
+ *      
+ *  -h, --help
+ *      Display help information
+ *      
+ *  --stop-at-already-downloaded-page
+ *      Harvesting stops at the first page which is already fully downloaded
+ *      
+ *  -t [toPage], --toPage [toPage]
+ *      Harvesting stops at this page
+ *      
+ *  --threads [downloadThreadsNumber]
+ *      Number of threads to download the images (default is 4)
+ * </pre>
+ * </p>
+ * 
+ * @author Bruno Kerrien
+ *
+ */
 @Command(name = "perseverance-harvester", description = "Perseverance raw images harvester command")
 public class Harvester {
 
