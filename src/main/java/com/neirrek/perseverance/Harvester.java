@@ -45,8 +45,8 @@ import com.github.rvesse.airline.annotations.Option;
 /**
  * <p>
  * A class that downloads the raw images taken by the Mars rover Perseverance
- * that are available on the NASA website at the following URL:
- * https://mars.nasa.gov/mars2020/multimedia/raw-images
+ * that are available on the NASA website at the following URL: <a href=
+ * "https://mars.nasa.gov/mars2020/multimedia/raw-images">https://mars.nasa.gov/mars2020/multimedia/raw-images</a>
  * </p>
  * <p>
  * This class can be executed as a command with the following parameters:
