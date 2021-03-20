@@ -270,16 +270,11 @@ public class Harvester {
             File file = new File(imagePath);
             boolean downloaded = false;
             boolean toDownload = !file.exists() || force;
-            if (logger.isInfoEnabled()) {
-                logger.info(String.format("%s %s", toDownload ? "*" : " ", imageUrl));
-            }
             if (toDownload) {
                 FileUtils.forceMkdirParent(file);
                 boolean retry = false;
                 while (!downloaded) {
-                    if (retry && logger.isInfoEnabled()) {
-                        logger.info(String.format("%s %s", "!", imageUrl));
-                    }
+                    logImageDownload(imagePath, toDownload, retry);
                     InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
                             .bodyStream();
                     try (FileOutputStream out = new FileOutputStream(file)) {
@@ -293,8 +288,20 @@ public class Harvester {
                                 e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
                     }
                 }
+            } else {
+                logImageDownload(imagePath, toDownload, false);
             }
             return downloaded;
+        }
+
+        private void logImageDownload(String imageUrl, boolean toDownload, boolean retry) {
+            String bullet = " ";
+            if (toDownload) {
+                bullet = retry ? "!" : "*";
+            }
+            if (logger.isInfoEnabled()) {
+                logger.info(String.format("%s %s", bullet, imageUrl));
+            }
         }
 
     }
