@@ -295,11 +295,11 @@ public class Harvester {
         }
 
         private void logImageDownload(String imageUrl, boolean toDownload, boolean retry) {
-            String bullet = " ";
-            if (toDownload) {
-                bullet = retry ? "!" : "*";
-            }
             if (logger.isInfoEnabled()) {
+                String bullet = " ";
+                if (toDownload) {
+                    bullet = retry ? "!" : "*";
+                }
                 logger.info(String.format("%s %s", bullet, imageUrl));
             }
         }
