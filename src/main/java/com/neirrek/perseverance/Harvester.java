@@ -83,17 +83,21 @@ public class Harvester {
 
     private static final String GECKO_DRIVER_PATH_PROPERTY = "webdriver.gecko.driver";
 
-    private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
+    private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 5;
 
-    private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
+    private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/msl/multimedia/raw-images/";
 
-    private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-z]+)\\/browse\\/([a-z]+)\\/(.+)$";
+    private static final String IMAGE_URL_PATTERN_1 = "^https:\\/\\/.+\\/msss\\/(\\d{5})\\/([a-z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/msss/03062/mcam/3062MR0159910230206068C00_DXXX.jpg
 
-    private static final String IMAGE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4";
+    private static final String IMAGE_URL_PATTERN_2 = "^https:\\/\\/.+\\/proj\\/msl\\/redops\\/ods\\/surface\\/sol\\/(\\d{5})\\/([a-z]+)\\/([a-z]+)\\/([a-z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/proj/msl/redops/ods/surface/sol/03063/opgs/edr/ncam/NRB_669427196EDR_S0870792NCAM00567M_.JPG
 
-    private static final String THUMBNAIL_IMAGES_SUFFIX = "_320.jpg";
+    private static final String IMAGE_PATH_PATTERN_1 = "$1\\/$2\\/$3";
 
-    private static final String LARGE_IMAGES_SUFFIX = ".png";
+    private static final String IMAGE_PATH_PATTERN_2 = "$1\\/$2\\/$3\\/$4\\/$5";
+
+    private static final String THUMBNAIL_IMAGES_PATTERN_1 = "^(.+)-thm\\.jpg$";
+
+    private static final String LARGE_IMAGES_PATTERN_1 = "$1.JPG";
 
     static {
         // If the JVM property "webdriver.gecko.driver", which defines
@@ -198,7 +202,7 @@ public class Harvester {
         driver = new FirefoxDriver(firefoxOptions);
         driver.manage().timeouts().implicitlyWait(5, TimeUnit.SECONDS);
         driver.get(RAW_IMAGES_URL);
-        paginationInput = driver.findElement(By.id("header_pagination"));
+        paginationInput = driver.findElement(By.cssSelector("div#primary_column input.page_num"));
     }
 
     private int getNumberOfPages() {
@@ -225,8 +229,8 @@ public class Harvester {
 
     private List<String> getImagesUrls() {
         return driver.findElements(By.className("raw_list_image_inner")).stream()
-                .map(e -> e.findElement(By.tagName("img")))
-                .map(e -> StringUtils.replace(e.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
+                .map(e -> e.findElement(By.tagName("img"))).map(e -> RegExUtils.replacePattern(e.getAttribute("src"),
+                        THUMBNAIL_IMAGES_PATTERN_1, LARGE_IMAGES_PATTERN_1))
                 .collect(Collectors.toList());
     }
 
@@ -265,8 +269,17 @@ public class Harvester {
 
         @Override
         public Boolean call() throws Exception {
-            String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
-                    RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
+            String imagePath;
+            if (imageUrl.matches(IMAGE_URL_PATTERN_1)) {
+                imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
+                        RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_1, IMAGE_PATH_PATTERN_1));
+            } else if (imageUrl.matches(IMAGE_URL_PATTERN_2)) {
+                imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
+                        RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_2, IMAGE_PATH_PATTERN_2));
+            } else {
+                logger.info("!!! Unable to download image: {}", imageUrl);
+                return false;
+            }
             File file = new File(imagePath);
             boolean downloaded = false;
             boolean toDownload = !file.exists() || force;
@@ -275,9 +288,10 @@ public class Harvester {
                 boolean retry = false;
                 while (!downloaded) {
                     logImageDownload(imagePath, toDownload, retry);
-                    InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
-                            .bodyStream();
+                    InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
+                        bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
+                                .bodyStream();
                         IOUtils.copy(bodyStream, out);
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
