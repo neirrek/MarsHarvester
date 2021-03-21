@@ -275,9 +275,10 @@ public class Harvester {
                 boolean retry = false;
                 while (!downloaded) {
                     logImageDownload(imagePath, toDownload, retry);
-                    InputStream bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
-                            .bodyStream();
+                    InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
+                        bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
+                                .bodyStream();
                         IOUtils.copy(bodyStream, out);
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
