@@ -287,7 +287,7 @@ public class Harvester {
                 FileUtils.forceMkdirParent(file);
                 int retry = 0;
                 while (!downloaded && retry <= 5) {
-                    logImageDownload(imageUrl, toDownload, retry);
+                    logImageDownload(toDownload, retry);
                     InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
                         bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
@@ -303,12 +303,12 @@ public class Harvester {
                     }
                 }
             } else {
-                logImageDownload(imagePath, toDownload, 0);
+                logImageDownload(toDownload, 0);
             }
             return downloaded;
         }
 
-        private void logImageDownload(String imageUrl, boolean toDownload, int retry) {
+        private void logImageDownload(boolean toDownload, int retry) {
             if (logger.isInfoEnabled()) {
                 String bullet = " ";
                 if (toDownload) {
