@@ -87,7 +87,7 @@ public class Harvester {
 
     private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
 
-    private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-z]+)\\/browse\\/([a-z]+)\\/(.+)$";
+    private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-zA-Z]+)\\/browse\\/([a-zA-Z]+)\\/(.+)$";
 
     private static final String IMAGE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4";
 
@@ -274,7 +274,7 @@ public class Harvester {
                 FileUtils.forceMkdirParent(file);
                 boolean retry = false;
                 while (!downloaded) {
-                    logImageDownload(imagePath, toDownload, retry);
+                    logImageDownload(imageUrl, toDownload, retry);
                     InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
                         bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
