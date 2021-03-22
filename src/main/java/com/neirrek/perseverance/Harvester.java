@@ -87,9 +87,9 @@ public class Harvester {
 
     private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/msl/multimedia/raw-images/";
 
-    private static final String IMAGE_URL_PATTERN_1 = "^https:\\/\\/.+\\/msss\\/(\\d{5})\\/([a-z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/msss/03062/mcam/3062MR0159910230206068C00_DXXX.jpg
+    private static final String IMAGE_URL_PATTERN_1 = "^https:\\/\\/.+\\/msss\\/(\\d{5})\\/([a-zA-Z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/msss/03062/mcam/3062MR0159910230206068C00_DXXX.jpg
 
-    private static final String IMAGE_URL_PATTERN_2 = "^https:\\/\\/.+\\/proj\\/msl\\/redops\\/ods\\/surface\\/sol\\/(\\d{5})\\/([a-z]+)\\/([a-z]+)\\/([a-z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/proj/msl/redops/ods/surface/sol/03063/opgs/edr/ncam/NRB_669427196EDR_S0870792NCAM00567M_.JPG
+    private static final String IMAGE_URL_PATTERN_2 = "^https:\\/\\/.+\\/proj\\/msl\\/redops\\/ods\\/surface\\/sol\\/(\\d{5})\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/proj/msl/redops/ods/surface/sol/03063/opgs/edr/ncam/NRB_669427196EDR_S0870792NCAM00567M_.JPG
 
     private static final String IMAGE_PATH_PATTERN_1 = "$1\\/$2\\/$3";
 
@@ -277,7 +277,7 @@ public class Harvester {
                 imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
                         RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_2, IMAGE_PATH_PATTERN_2));
             } else {
-                logger.info("!!! Unable to download image: {}", imageUrl);
+                logger.info("/!\\ Unable to download image: {}", imageUrl);
                 return false;
             }
             File file = new File(imagePath);
@@ -285,9 +285,9 @@ public class Harvester {
             boolean toDownload = !file.exists() || force;
             if (toDownload) {
                 FileUtils.forceMkdirParent(file);
-                boolean retry = false;
-                while (!downloaded) {
-                    logImageDownload(imagePath, toDownload, retry);
+                int retry = 0;
+                while (!downloaded && retry <= 5) {
+                    logImageDownload(imageUrl, toDownload, retry);
                     InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
                         bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
@@ -296,23 +296,23 @@ public class Harvester {
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
                     } catch (IOException e) {
-                        retry = true;
+                        retry++;
                     } finally {
                         IOUtils.closeQuietly(bodyStream,
                                 e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
                     }
                 }
             } else {
-                logImageDownload(imagePath, toDownload, false);
+                logImageDownload(imagePath, toDownload, 0);
             }
             return downloaded;
         }
 
-        private void logImageDownload(String imageUrl, boolean toDownload, boolean retry) {
+        private void logImageDownload(String imageUrl, boolean toDownload, int retry) {
             if (logger.isInfoEnabled()) {
                 String bullet = " ";
                 if (toDownload) {
-                    bullet = retry ? "!" : "*";
+                    bullet = retry > 0 ? "!" : "*";
                 }
                 logger.info(String.format("%s %s", bullet, imageUrl));
             }
