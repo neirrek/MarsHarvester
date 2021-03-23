@@ -272,9 +272,9 @@ public class Harvester {
             boolean toDownload = !file.exists() || force;
             if (toDownload) {
                 FileUtils.forceMkdirParent(file);
-                boolean retry = false;
-                while (!downloaded) {
-                    logImageDownload(imageUrl, toDownload, retry);
+                int retry = 0;
+                while (!downloaded && retry <= 5) {
+                    logImageDownload(toDownload, retry);
                     InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
                         bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
@@ -283,23 +283,23 @@ public class Harvester {
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
                     } catch (IOException e) {
-                        retry = true;
+                        retry++;
                     } finally {
                         IOUtils.closeQuietly(bodyStream,
                                 e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
                     }
                 }
             } else {
-                logImageDownload(imagePath, toDownload, false);
+                logImageDownload(false, 0);
             }
             return downloaded;
         }
 
-        private void logImageDownload(String imageUrl, boolean toDownload, boolean retry) {
+        private void logImageDownload(boolean toDownload, int retry) {
             if (logger.isInfoEnabled()) {
                 String bullet = " ";
                 if (toDownload) {
-                    bullet = retry ? "!" : "*";
+                    bullet = retry > 0 ? "!" : "*";
                 }
                 logger.info(String.format("%s %s", bullet, imageUrl));
             }
