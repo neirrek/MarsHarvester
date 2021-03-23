@@ -29,6 +29,7 @@ import org.jsoup.Jsoup;
 import org.openqa.selenium.By;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
@@ -89,7 +90,7 @@ public class Harvester {
 
     private static final String IMAGE_URL_PATTERN_1 = "^https:\\/\\/.+\\/msss\\/(\\d{5})\\/([a-zA-Z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/msss/03062/mcam/3062MR0159910230206068C00_DXXX.jpg
 
-    private static final String IMAGE_URL_PATTERN_2 = "^https:\\/\\/.+\\/proj\\/msl\\/redops\\/ods\\/surface\\/sol\\/(\\d{5})\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/proj/msl/redops/ods/surface/sol/03063/opgs/edr/ncam/NRB_669427196EDR_S0870792NCAM00567M_.JPG
+    private static final String IMAGE_URL_PATTERN_2 = "^https:\\/\\/.+(?:\\/proj\\/msl\\/redops)?\\/ods\\/surface\\/sol\\/(\\d{5})\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/(.+)$"; // https://mars.nasa.gov/msl-raw-images/proj/msl/redops/ods/surface/sol/03063/opgs/edr/ncam/NRB_669427196EDR_S0870792NCAM00567M_.JPG
 
     private static final String IMAGE_PATH_PATTERN_1 = "$1\\/$2\\/$3";
 
@@ -213,17 +214,23 @@ public class Harvester {
         String startIndex = NumberFormat.getInstance(Locale.ENGLISH).format((page - 1) * 50 + 1L);
         boolean ok = false;
         int retry = 0;
+        WebDriverException exception = null;
         while (!ok && retry < 10) {
             paginationInput.clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
                 new WebDriverWait(driver, 10).until(
                         ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
+                exception = null;
                 ok = true;
             } catch (TimeoutException e) {
-                retry++;
+                exception = e;
                 logger.debug(e.getMessage(), e);
+                retry++;
             }
+        }
+        if (exception != null) {
+            throw new HarvesterException(String.format("An error occurred while going to page %s", page), exception);
         }
     }
 
@@ -296,6 +303,13 @@ public class Harvester {
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
                     } catch (IOException e) {
+                        String urlJpgLowerCase = RegExUtils.replacePattern(imageUrl, "^(.+)\\.JPG$", "$1.jpg");
+                        String urlJpgUpperCase = RegExUtils.replacePattern(imageUrl, "^(.+)\\.jpg$", "$1.JPG");
+                        if (imageUrl.equals(urlJpgUpperCase)) {
+                            imageUrl = urlJpgLowerCase;
+                        } else {
+                            imageUrl = urlJpgUpperCase;
+                        }
                         retry++;
                     } finally {
                         IOUtils.closeQuietly(bodyStream,
