@@ -127,11 +127,11 @@ public class Harvester {
     @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
     private boolean force;
 
-    @Option(name = {
-            "--stop-at-already-downloaded-page" }, description = "Harvesting stops at the first page which is already fully downloaded")
-    private boolean stopAtAlreadyDownloadedPage;
+    @Option(name = { "-s",
+            "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded")
+    private int stopAfterAlreadyDownloadedPages = -1;
 
-    @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 4)")
+    @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 5)")
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
 
     @Inject
@@ -159,8 +159,14 @@ public class Harvester {
         downloadImageService = new ExecutorCompletionService<>(executorService);
         int maxPage = Math.min(getNumberOfPages(), toPage);
         boolean stop = false;
+        int nbPagesAlreadyProcessed = 0;
         for (int p = fromPage; p <= maxPage && !stop; p++) {
-            stop = processPage(p, maxPage) && stopAtAlreadyDownloadedPage;
+            boolean alreadyProcessed = processPage(p, maxPage);
+            if (alreadyProcessed) {
+                stop = ++nbPagesAlreadyProcessed == stopAfterAlreadyDownloadedPages;
+            } else {
+                nbPagesAlreadyProcessed = 0;
+            }
         }
         driver.quit();
         if (logger.isInfoEnabled()) {
