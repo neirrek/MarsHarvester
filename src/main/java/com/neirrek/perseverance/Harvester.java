@@ -224,7 +224,6 @@ public class Harvester {
                 ok = true;
             } catch (TimeoutException e) {
                 retry++;
-                logger.info("Fuck! {}", e.getMessage());
                 logger.debug(e.getMessage(), e);
             }
         }
