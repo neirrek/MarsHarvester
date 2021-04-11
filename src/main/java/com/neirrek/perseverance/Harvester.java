@@ -207,7 +207,7 @@ public class Harvester {
         FirefoxOptions firefoxOptions = new FirefoxOptions();
         firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
         driver = new FirefoxDriver(firefoxOptions);
-        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));
+        driver.manage().timeouts().implicitlyWait(Duration.ofMillis(500));
         driver.get(RAW_IMAGES_URL);
         paginationInput = driver.findElement(By.cssSelector("div#primary_column input.page_num"));
     }
