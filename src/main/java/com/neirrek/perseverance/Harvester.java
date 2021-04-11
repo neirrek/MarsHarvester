@@ -5,6 +5,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.NumberFormat;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -14,7 +15,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -207,7 +207,7 @@ public class Harvester {
         FirefoxOptions firefoxOptions = new FirefoxOptions();
         firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
         driver = new FirefoxDriver(firefoxOptions);
-        driver.manage().timeouts().implicitlyWait(5, TimeUnit.SECONDS);
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(5));
         driver.get(RAW_IMAGES_URL);
         paginationInput = driver.findElement(By.cssSelector("div#primary_column input.page_num"));
     }
@@ -225,7 +225,7 @@ public class Harvester {
             paginationInput.clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
-                new WebDriverWait(driver, 10).until(
+                new WebDriverWait(driver, Duration.ofSeconds(10)).until(
                         ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
                 exception = null;
                 ok = true;
