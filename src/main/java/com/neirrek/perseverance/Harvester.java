@@ -219,7 +219,7 @@ public class Harvester {
             paginationInput.clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
-                new WebDriverWait(driver, 10).until(
+                new WebDriverWait(driver, 1).until(
                         ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
                 ok = true;
             } catch (TimeoutException e) {
