@@ -5,6 +5,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.NumberFormat;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -14,7 +15,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -202,7 +202,7 @@ public class Harvester {
         FirefoxOptions firefoxOptions = new FirefoxOptions();
         firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
         driver = new FirefoxDriver(firefoxOptions);
-        driver.manage().timeouts().implicitlyWait(5, TimeUnit.SECONDS);
+        driver.manage().timeouts().implicitlyWait(Duration.ofMillis(500));
         driver.get(RAW_IMAGES_URL);
         paginationInput = driver.findElement(By.id("header_pagination"));
     }
@@ -212,18 +212,19 @@ public class Harvester {
     }
 
     private void goToPage(int page) {
-        String startIndex = NumberFormat.getInstance(Locale.ENGLISH).format((page - 1) * 50 + 1L);
+        String startIndex = NumberFormat.getInstance(Locale.ENGLISH).format((page - 1) * 100 + 1L);
         boolean ok = false;
         int retry = 0;
         while (!ok && retry < 10) {
             paginationInput.clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
-                new WebDriverWait(driver, 1).until(
+                new WebDriverWait(driver, Duration.ofSeconds(10)).until(
                         ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
                 ok = true;
             } catch (TimeoutException e) {
                 retry++;
+                logger.info("Fuck! {}", e.getMessage());
                 logger.debug(e.getMessage(), e);
             }
         }
