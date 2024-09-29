@@ -27,6 +27,7 @@ import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.openqa.selenium.By;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -230,10 +231,12 @@ public class Harvester {
     }
 
     private List<String> getImagesUrls() {
-        return driver.findElements(By.className("raw_list_image_inner")).stream()
+        return new WebDriverWait(driver, Duration.ofSeconds(10))
+            .ignoring(StaleElementReferenceException.class)
+            .until(d -> d.findElements(By.className("raw_list_image_inner")).stream()
                 .map(e -> e.findElement(By.tagName("img")))
                 .map(e -> StringUtils.replace(e.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     private void logStartPage(int page, int nbPages) {
