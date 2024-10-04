@@ -1,5 +1,6 @@
 package com.neirrek.perseverance;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -18,7 +19,20 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.ImageTypeSpecifier;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.metadata.IIOInvalidTreeException;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.stream.FileImageOutputStream;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.inject.Inject;
 
 import org.apache.commons.io.FileUtils;
@@ -37,6 +51,7 @@ import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.Element;
 
 import com.github.rvesse.airline.HelpOption;
 import com.github.rvesse.airline.SingleCommand;
@@ -65,14 +80,18 @@ import com.github.rvesse.airline.annotations.Option;
  *  -h, --help
  *      Display help information
  *      
- *  --stop-at-already-downloaded-page
- *      Harvesting stops at the first page which is already fully downloaded
+ *  -s [n], --stop-at-already-downloaded-pages [n]
+ *      Harvesting stops after the nth page which is already fully downloaded
  *      
  *  -t [toPage], --toPage [toPage]
  *      Harvesting stops at this page
  *      
  *  --threads [downloadThreadsNumber]
  *      Number of threads to download the images (default is 4)
+ *      
+ *  --convert-to-jpg [compression-ratio]
+ *      Convert the downloaded images to JPG format with the given compression ratio
+ * 
  * </pre>
  * </p>
  * 
@@ -86,15 +105,19 @@ public class Harvester {
 
     private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
 
+    private static final int DEFAULT_JPG_COMPRESSION_RATIO = 0;
+
+    private static final int MAX_JPG_COMPRESSION_RATIO = 100;
+
     private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
 
-    private static final String IMAGE_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-zA-Z]+)\\/browse\\/([a-zA-Z]+)\\/(.+)$";
+    private static final String IMAGES_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-zA-Z]+)\\/browse\\/([a-zA-Z]+)\\/(.+)\\.png$";
 
-    private static final String IMAGE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4";
+    private static final String IMAGES_SAVE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4%s";
 
     private static final String THUMBNAIL_IMAGES_SUFFIX = "_320.jpg";
 
-    private static final String LARGE_IMAGES_SUFFIX = ".png";
+    private static final String LARGE_IMAGES_SUFFIX = ImageFormat.PNG.getExtension();
 
     static {
         // If the JVM property "webdriver.gecko.driver", which defines
@@ -124,11 +147,15 @@ public class Harvester {
     private boolean force;
 
     @Option(name = { "-s",
-            "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded")
+        "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded")
     private int stopAfterAlreadyDownloadedPages = -1;
 
     @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 4)")
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
+
+    @Option(name = {
+        "--convert-to-jpg" }, description = "Convert the downloaded images to JPG format with the given compression ratio")
+    private int jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
 
     @Inject
     private HelpOption<Harvester> help;
@@ -138,6 +165,8 @@ public class Harvester {
     private WebDriver driver;
 
     private WebElement paginationInput;
+
+    private ImageFormat imagesSaveFormat = ImageFormat.PNG;
 
     private AtomicInteger nbDownloadedImages = new AtomicInteger(0);
 
@@ -151,6 +180,12 @@ public class Harvester {
 
     private void execute() {
         initializeDriverAndPagination();
+        if (jpgCompressionRatio < DEFAULT_JPG_COMPRESSION_RATIO) {
+            jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
+        } else {
+            imagesSaveFormat = ImageFormat.JPG;
+            jpgCompressionRatio = Math.min(jpgCompressionRatio, MAX_JPG_COMPRESSION_RATIO);
+        }
         ExecutorService executorService = Executors.newFixedThreadPool(downloadThreadsNumber);
         downloadImageService = new ExecutorCompletionService<>(executorService);
         int maxPage = Math.min(getNumberOfPages(), toPage);
@@ -176,7 +211,8 @@ public class Harvester {
         goToPage(page);
         List<String> imagesUrls = getImagesUrls();
         for (String imageUrl : imagesUrls) {
-            downloadImageService.submit(new DownloadImageCallable(imageUrl));
+            downloadImageService.submit(new ImageDownloader(imageUrl, saveRootDirectory, imagesSaveFormat,
+                jpgCompressionRatio, force, nbDownloadedImages, logger));
         }
         boolean pageAlreadyDownloaded = true;
         try {
@@ -187,7 +223,7 @@ public class Harvester {
             Thread.currentThread().interrupt();
         } catch (ExecutionException e) {
             throw new HarvesterException(String.format("An error occurred while downloading page %s", page),
-                    e.getCause());
+                e.getCause());
         }
         if (pageAlreadyDownloaded) {
             logger.info("Page already fully downloaded!");
@@ -220,8 +256,8 @@ public class Harvester {
             paginationInput.clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
-                new WebDriverWait(driver, Duration.ofSeconds(10)).until(
-                        ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
+                new WebDriverWait(driver, Duration.ofSeconds(10))
+                    .until(ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
                 ok = true;
             } catch (TimeoutException e) {
                 retry++;
@@ -231,8 +267,7 @@ public class Harvester {
     }
 
     private List<String> getImagesUrls() {
-        return new WebDriverWait(driver, Duration.ofSeconds(10))
-            .ignoring(StaleElementReferenceException.class)
+        return new WebDriverWait(driver, Duration.ofSeconds(10)).ignoring(StaleElementReferenceException.class)
             .until(d -> d.findElements(By.className("raw_list_image_inner")).stream()
                 .map(e -> e.findElement(By.tagName("img")))
                 .map(e -> StringUtils.replace(e.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
@@ -240,17 +275,17 @@ public class Harvester {
     }
 
     private void logStartPage(int page, int nbPages) {
-        logPagePart(PagePart.START, page, nbPages);
+        logPagePart("Start", page, nbPages);
     }
 
     private void printEndPage(int page, int nbPages) {
-        logPagePart(PagePart.END, page, nbPages);
+        logPagePart("End", page, nbPages);
     }
 
-    private void logPagePart(PagePart pagePart, int page, int nbPages) {
+    private void logPagePart(String pagePart, int page, int nbPages) {
         if (logger.isInfoEnabled()) {
-            String message = StringUtils.rightPad(String.format("====[%s of page %s/%s]",
-                    StringUtils.capitalize(pagePart.name().toLowerCase()), page, nbPages), 148, "=");
+            String message = StringUtils.rightPad(String.format("====[%s of page %s/%s]", pagePart, page, nbPages), 148,
+                "=");
             logger.info(message);
         }
     }
@@ -264,18 +299,37 @@ public class Harvester {
         return helpShown;
     }
 
-    private class DownloadImageCallable implements Callable<Boolean> {
+    private static class ImageDownloader implements Callable<Boolean> {
 
-        private String imageUrl;
+        private final String imageUrl;
 
-        public DownloadImageCallable(String imageUrl) {
+        private final String saveRootDirectory;
+
+        private final ImageFormat imagesSaveFormat;
+
+        private final float compressionQuality;
+
+        private final boolean force;
+
+        private final AtomicInteger nbDownloadedImages;
+
+        private final Logger logger;
+
+        public ImageDownloader(String imageUrl, String saveRootDirectory, ImageFormat imagesSaveFormat,
+            int jpgConversionRatio, boolean force, AtomicInteger nbDownloadedImages, Logger logger) {
             this.imageUrl = imageUrl;
+            this.saveRootDirectory = saveRootDirectory;
+            this.imagesSaveFormat = imagesSaveFormat;
+            this.compressionQuality = (float) jpgConversionRatio / 100;
+            this.force = force;
+            this.nbDownloadedImages = nbDownloadedImages;
+            this.logger = logger;
         }
 
         @Override
         public Boolean call() throws Exception {
             String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
-                    RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN, IMAGE_PATH_PATTERN));
+                RegExUtils.replacePattern(imageUrl, IMAGES_URL_PATTERN, imagesSaveFormat.getImagesSavePathPattern()));
             File file = new File(imagePath);
             boolean downloaded = false;
             boolean toDownload = !file.exists() || force;
@@ -285,21 +339,24 @@ public class Harvester {
                 while (!downloaded && retry <= 5) {
                     logImageDownload(toDownload, retry);
                     InputStream bodyStream = null;
-                    try (FileOutputStream out = new FileOutputStream(file)) {
-                        bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).timeout(0).maxBodySize(0).execute()
-                                .bodyStream();
-                        IOUtils.copy(bodyStream, out);
+                    try {
+                        bodyStream = Jsoup.connect(imageUrl) //
+                            .ignoreContentType(true) //
+                            .timeout(0) //
+                            .maxBodySize(0) //
+                            .execute().bodyStream();
+                        imagesSaveFormat.saveImage(bodyStream, file, this);
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
                     } catch (IOException e) {
                         retry++;
                     } finally {
                         IOUtils.closeQuietly(bodyStream,
-                                e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
+                            e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
                     }
                 }
             } else {
-                logImageDownload(false, 0);
+                // logImageDownload(false, 0);
             }
             return downloaded;
         }
@@ -314,10 +371,190 @@ public class Harvester {
             }
         }
 
+        private void savePNGImageToFile(InputStream pngImageInputStream, File pngFile) throws IOException {
+            try (FileOutputStream fileOutputStream = new FileOutputStream(pngFile)) {
+                IOUtils.copy(pngImageInputStream, fileOutputStream);
+            }
+        }
+
+        private void convertPNGImageToJPG(InputStream pngImageInputStream, File jpgFile) throws IOException {
+            ImageReader pngReader = ImageFormat.PNG.getImageReader();
+            ImageWriter jpgWriter = ImageFormat.JPG.getImageWriter();
+            try (ImageInputStream imageInputStream = new MemoryCacheImageInputStream(pngImageInputStream);
+                ImageOutputStream outputStream = new FileImageOutputStream(jpgFile)) {
+                ImageWriteParam jpgWriteParam = jpgWriter.getDefaultWriteParam();
+                jpgWriteParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                jpgWriteParam.setCompressionQuality(compressionQuality);
+                pngReader.setInput(imageInputStream);
+                BufferedImage pngImage = pngReader.read(0);
+                IIOMetadata pngMetadata = pngReader.getImageMetadata(0);
+                IIOMetadata jpgMetadata = null;
+                ImageMetadata pngImageMetadata = ImageMetadata.from(pngMetadata);
+                if (pngImageMetadata != null) {
+                    jpgMetadata = jpgWriter.getDefaultImageMetadata(new ImageTypeSpecifier(pngImage), jpgWriteParam);
+                    pngImageMetadata.fill(jpgMetadata);
+                }
+                IIOImage jpgImage = new IIOImage(pngImage, null, jpgMetadata);
+                jpgWriter.setOutput(outputStream);
+                jpgWriter.write(null, jpgImage, jpgWriteParam);
+            } finally {
+                jpgWriter.dispose();
+                pngReader.dispose();
+            }
+        }
+
     }
 
-    private enum PagePart {
-        START, END;
+    private enum ImageFormat {
+
+        PNG {
+            @Override
+            void saveImage(InputStream imageInputStream, File imageFile, ImageDownloader imageDownloader)
+                throws IOException {
+                imageDownloader.savePNGImageToFile(imageInputStream, imageFile);
+            }
+
+            @Override
+            String getMetadataNativeFormatName() {
+                return "javax_imageio_png_1.0";
+            }
+
+            @Override
+            String getMetadataImageInfoTag() {
+                return "IHDR";
+            }
+
+            @Override
+            String getMetadataBitDepthAttribute() {
+                return "bitDepth";
+            }
+
+            @Override
+            String getMetadataWidthAttribute() {
+                return "width";
+            }
+
+            @Override
+            String getMetadataHeightAttribute() {
+                return "height";
+            }
+        }, //
+        JPG {
+            @Override
+            void saveImage(InputStream imageInputStream, File imageFile, ImageDownloader imageDownloader)
+                throws IOException {
+                imageDownloader.convertPNGImageToJPG(imageInputStream, imageFile);
+            }
+
+            @Override
+            String getMetadataNativeFormatName() {
+                return "javax_imageio_jpeg_image_1.0";
+            }
+
+            @Override
+            String getMetadataImageInfoTag() {
+                return "sof";
+            }
+
+            @Override
+            String getMetadataBitDepthAttribute() {
+                return "samplePrecision";
+            }
+
+            @Override
+            String getMetadataWidthAttribute() {
+                return "samplesPerLine";
+            }
+
+            @Override
+            String getMetadataHeightAttribute() {
+                return "numLines";
+            }
+        };
+
+        private final String imagesSavePathPattern = String.format(IMAGES_SAVE_PATH_PATTERN, getExtension());
+
+        static ImageFormat forMetadataNativeFormatName(String metadataNativeFormatName) {
+            return Stream.of(ImageFormat.values()) //
+                .filter(i -> StringUtils.equals(i.getMetadataNativeFormatName(), metadataNativeFormatName)) //
+                .findAny() //
+                .orElse(null);
+        }
+
+        String getExtension() {
+            return new StringBuffer(".").append(getName()).toString();
+        }
+
+        String getName() {
+            return name().toLowerCase();
+        }
+
+        String getImagesSavePathPattern() {
+            return imagesSavePathPattern;
+        }
+
+        ImageReader getImageReader() {
+            return ImageIO.getImageReadersByFormatName(getName()).next();
+        }
+
+        ImageWriter getImageWriter() {
+            return ImageIO.getImageWritersByFormatName(getName()).next();
+        }
+
+        abstract void saveImage(InputStream imageInputStream, File imageFile, ImageDownloader imageDownloader)
+            throws IOException;
+
+        abstract String getMetadataNativeFormatName();
+
+        abstract String getMetadataImageInfoTag();
+
+        abstract String getMetadataBitDepthAttribute();
+
+        abstract String getMetadataWidthAttribute();
+
+        abstract String getMetadataHeightAttribute();
+
+    }
+
+    private static class ImageMetadata {
+
+        private String bitDepth;
+
+        private String width;
+
+        private String height;
+
+        private ImageMetadata(String bitDepth, String width, String height) {
+            this.bitDepth = bitDepth;
+            this.width = width;
+            this.height = height;
+        }
+
+        static ImageMetadata from(IIOMetadata metadata) {
+            ImageFormat imageFormat = ImageFormat.forMetadataNativeFormatName(metadata.getNativeMetadataFormatName());
+            if (imageFormat == null) {
+                return null;
+            }
+            Element metadataTree = (Element) metadata.getAsTree(imageFormat.getMetadataNativeFormatName());
+            Element metadataImageInfoTag = (Element) metadataTree
+                .getElementsByTagName(imageFormat.getMetadataImageInfoTag()).item(0);
+            String bitDepth = metadataImageInfoTag.getAttribute(imageFormat.getMetadataBitDepthAttribute());
+            String width = metadataImageInfoTag.getAttribute(imageFormat.getMetadataWidthAttribute());
+            String height = metadataImageInfoTag.getAttribute(imageFormat.getMetadataHeightAttribute());
+            return new ImageMetadata(bitDepth, width, height);
+        }
+
+        void fill(IIOMetadata metadata) throws IIOInvalidTreeException {
+            ImageFormat imageFormat = ImageFormat.forMetadataNativeFormatName(metadata.getNativeMetadataFormatName());
+            Element metadataTree = (Element) metadata.getAsTree(imageFormat.getMetadataNativeFormatName());
+            Element metadataImageInfoTag = (Element) metadataTree
+                .getElementsByTagName(imageFormat.getMetadataImageInfoTag()).item(0);
+            metadataImageInfoTag.setAttribute(imageFormat.getMetadataBitDepthAttribute(), bitDepth);
+            metadataImageInfoTag.setAttribute(imageFormat.getMetadataWidthAttribute(), width);
+            metadataImageInfoTag.setAttribute(imageFormat.getMetadataHeightAttribute(), height);
+            metadata.setFromTree(imageFormat.getMetadataNativeFormatName(), metadataTree);
+        }
+
     }
 
     private static class Config {
