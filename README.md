@@ -46,21 +46,38 @@ OPTIONS
             compression ratio (default is not to convert when this option is
             missing
 
+            This option may occur a maximum of 1 times
+
+
             This options value must fall in the following range: 1 <= value <= 100
 
 
         -d <saveRootDirectory>, --dir <saveRootDirectory>
             Root directory in which the images are saved
 
+            This option may occur a maximum of 1 times
+
+
+            This options value must be a path to a directory. The provided path
+            must exist on the file system. The provided path must be readable
+            and writable.
+
+
         -f <fromPage>, --fromPage <fromPage>
             Harvesting starts from this page (default is page 1 when this
             option is missing)
+
+            This option may occur a maximum of 1 times
+
 
             This options value must fall in the following range: value >= 1
 
 
         --force
             Force harvesting already downloaded images
+
+            This option may occur a maximum of 1 times
+
 
         -h, --help
             Display help information
@@ -70,6 +87,9 @@ OPTIONS
             Harvesting stops after the nth page which is already fully
             downloaded (default is not to stop when this option is missing)
 
+            This option may occur a maximum of 1 times
+
+
             This options value must fall in the following range: value >= 1
 
 
@@ -77,12 +97,18 @@ OPTIONS
             Harvesting stops at this page (default is last page when this
             option is missing)
 
+            This option may occur a maximum of 1 times
+
+
             This options value must fall in the following range: value >= 1
 
 
         --threads <downloadThreadsNumber>
             Number of threads to download the images (default is 4 when this
             option is missing)
+
+            This option may occur a maximum of 1 times
+
 
             This options value must fall in the following range: value >= 1
 ```
