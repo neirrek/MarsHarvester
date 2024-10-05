@@ -33,7 +33,6 @@ import javax.imageio.stream.FileImageOutputStream;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
-import javax.inject.Inject;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -41,12 +40,14 @@ import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
+import org.openqa.selenium.firefox.GeckoDriverService;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
@@ -55,8 +56,10 @@ import org.w3c.dom.Element;
 
 import com.github.rvesse.airline.HelpOption;
 import com.github.rvesse.airline.SingleCommand;
+import com.github.rvesse.airline.annotations.AirlineModule;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
+import com.github.rvesse.airline.annotations.restrictions.ranges.IntegerRange;
 
 /**
  * <p>
@@ -103,6 +106,8 @@ public class Harvester {
 
     private static final String GECKO_DRIVER_PATH_PROPERTY = "webdriver.gecko.driver";
 
+    private static final String FIREFOX_BIN_PATH_PROPERTY = "webdriver.firefox.bin";
+
     private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
 
     private static final int DEFAULT_JPG_COMPRESSION_RATIO = 0;
@@ -127,7 +132,7 @@ public class Harvester {
             System.setProperty(GECKO_DRIVER_PATH_PROPERTY, Config.getGeckoDriverPath());
         }
         // Redirecting the browser logs to /dev/null
-        System.setProperty(FirefoxDriver.SystemProperty.BROWSER_LOGFILE, "/dev/null");
+        System.setProperty(GeckoDriverService.GECKO_DRIVER_LOG_PROPERTY, "/dev/null");
         // And disabling the useless Selenium logs not to pollute the logs
         java.util.logging.Logger.getLogger("org.openqa.selenium").setLevel(Level.OFF);
     }
@@ -137,27 +142,35 @@ public class Harvester {
     @Option(name = { "-d", "--dir" }, description = "Root directory in which the images are saved")
     private String saveRootDirectory;
 
-    @Option(name = { "-f", "--fromPage" }, description = "Harvesting starts from this page")
+    @Option(name = { "-f",
+        "--fromPage" }, description = "Harvesting starts from this page (default is page 1 when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
     private int fromPage = 1;
 
-    @Option(name = { "-t", "--toPage" }, description = "Harvesting stops at this page")
+    @Option(name = { "-t",
+        "--toPage" }, description = "Harvesting stops at this page (default is last page when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
     private int toPage = Integer.MAX_VALUE;
 
     @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
     private boolean force;
 
     @Option(name = { "-s",
-        "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded")
-    private int stopAfterAlreadyDownloadedPages = -1;
+        "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded (default is not to stop when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
+    private int stopAfterAlreadyDownloadedPages;
 
-    @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 4)")
+    @Option(name = {
+        "--threads" }, description = "Number of threads to download the images (default is 4 when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
 
     @Option(name = {
-        "--convert-to-jpg" }, description = "Convert the downloaded images to JPG format with the given compression ratio")
+        "--convert-to-jpg" }, description = "Convert the downloaded images to JPG format with the given compression ratio (default is not to convert when this option is missing")
+    @IntegerRange(min = 1, minInclusive = true, max = 100, maxInclusive = true)
     private int jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
 
-    @Inject
+    @AirlineModule
     private HelpOption<Harvester> help;
 
     private CompletionService<Boolean> downloadImageService;
@@ -237,7 +250,8 @@ public class Harvester {
             driver.quit();
         }
         FirefoxOptions firefoxOptions = new FirefoxOptions();
-        firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
+        firefoxOptions.setBinary(Config.getFirefoxBinPath());
+        firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=2560,1440");
         driver = new FirefoxDriver(firefoxOptions);
         driver.manage().timeouts().implicitlyWait(Duration.ofMillis(500));
         driver.get(RAW_IMAGES_URL);
@@ -253,7 +267,7 @@ public class Harvester {
         boolean ok = false;
         int retry = 0;
         while (!ok && retry < 10) {
-            paginationInput.clear();
+            scrollIntoView(paginationInput).clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
                 new WebDriverWait(driver, Duration.ofSeconds(10))
@@ -297,6 +311,16 @@ public class Harvester {
             helpShown = true;
         }
         return helpShown;
+    }
+
+    private WebElement scrollIntoView(WebElement webElement) {
+        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", webElement);
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return webElement;
     }
 
     private static class ImageDownloader implements Callable<Boolean> {
@@ -580,6 +604,10 @@ public class Harvester {
 
         static String getGeckoDriverPath() {
             return getInstance().getProperty(GECKO_DRIVER_PATH_PROPERTY);
+        }
+
+        static String getFirefoxBinPath() {
+            return getInstance().getProperty(FIREFOX_BIN_PATH_PROPERTY);
         }
 
         private String getProperty(String propertyName) {

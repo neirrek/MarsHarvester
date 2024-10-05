@@ -27,19 +27,30 @@ NAME
         perseverance-harvester - Perseverance raw images harvester command
 
 SYNOPSIS
-        perseverance-harvester [ {-d | --dir} <saveRootDirectory> ]
-                [ {-f | --fromPage} <fromPage> ] [ --force ] [ {-h | --help} ]
-                [ --stop-at-already-downloaded-page ]
+        perseverance-harvester [ --convert-to-jpg <jpgCompressionRatio> ]
+                [ {-d | --dir} <saveRootDirectory> ]
+                [ {-f | --fromPage} <fromPage> ] [ --force ] [ {-h | --help} ] [ {-s | --stop-after-already-downloaded-pages} <stopAfterAlreadyDownloadedPages> ]
                 [ {-t | --toPage} <toPage> ]
                 [ --threads <downloadThreadsNumber> ]
-                [ --convert-to-jpg <compressionRatio> ]
 
 OPTIONS
+        --convert-to-jpg <jpgCompressionRatio>
+            Convert the downloaded images to JPG format with the given
+            compression ratio (default is not to convert when this option is
+            missing
+
+            This options value must fall in the following range: 1 <= value <= 100
+
+
         -d <saveRootDirectory>, --dir <saveRootDirectory>
             Root directory in which the images are saved
 
         -f <fromPage>, --fromPage <fromPage>
-            Harvesting starts from this page
+            Harvesting starts from this page (default is page 1 when this
+            option is missing)
+
+            This options value must fall in the following range: value >= 1
+
 
         --force
             Force harvesting already downloaded images
@@ -47,16 +58,24 @@ OPTIONS
         -h, --help
             Display help information
 
-        --stop-at-already-downloaded-page
-            Harvesting stops at the first page which is already fully
-            downloaded
+        -s <stopAfterAlreadyDownloadedPages>,
+        --stop-after-already-downloaded-pages <stopAfterAlreadyDownloadedPages>
+            Harvesting stops after the nth page which is already fully
+            downloaded (default is not to stop when this option is missing)
+
+            This options value must fall in the following range: value >= 1
+
 
         -t <toPage>, --toPage <toPage>
-            Harvesting stops at this page
+            Harvesting stops at this page (default is last page when this
+            option is missing)
+
+            This options value must fall in the following range: value >= 1
+
 
         --threads <downloadThreadsNumber>
-            Number of threads to download the images (default is 4)
+            Number of threads to download the images (default is 4 when this
+            option is missing)
 
-        --convert-to-jpg <compressionRatio>
-            Convert the downloaded images to JPG format with the given compression ratio
+            This options value must fall in the following range: value >= 1
 ```
