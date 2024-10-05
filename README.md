@@ -29,7 +29,10 @@ NAME
 SYNOPSIS
         perseverance-harvester [ --convert-to-jpg <jpgCompressionRatio> ]
                 [ {-d | --dir} <saveRootDirectory> ]
-                [ {-f | --fromPage} <fromPage> ] [ --force ] [ {-h | --help} ] [ {-s | --stop-after-already-downloaded-pages} <stopAfterAlreadyDownloadedPages> ]
+                [ {-f | --fromPage} <fromPage> ]
+                [ --force ]
+                [ {-h | --help} ]
+                [ {-s | --stop-after-already-downloaded-pages} <stopAfterAlreadyDownloadedPages> ]
                 [ {-t | --toPage} <toPage> ]
                 [ --threads <downloadThreadsNumber> ]
 
