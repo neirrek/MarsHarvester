@@ -6,6 +6,10 @@ What is it?
 -----------
 **PerseveranceHarvester** is a **standalone Java program** to download the raw images taken by the Mars rover **Perseverance** which are available on the **NASA** website at the following URL: <https://mars.nasa.gov/mars2020/multimedia/raw-images/>
 
+Requirements
+------------
+Running **PerseveranceHarvester** requires **Java 17** at least.
+
 Packaging
 ---------
 Create an uber-jar containing all the dependencies by executing the following command:
