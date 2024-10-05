@@ -59,6 +59,9 @@ import com.github.rvesse.airline.SingleCommand;
 import com.github.rvesse.airline.annotations.AirlineModule;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
+import com.github.rvesse.airline.annotations.restrictions.Once;
+import com.github.rvesse.airline.annotations.restrictions.Path;
+import com.github.rvesse.airline.annotations.restrictions.PathKind;
 import com.github.rvesse.airline.annotations.restrictions.ranges.IntegerRange;
 
 /**
@@ -139,35 +142,43 @@ public class Harvester {
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
 
-    @Option(name = { "-d", "--dir" }, description = "Root directory in which the images are saved")
+    @Option(name = { "-d", "--dir" }, arity = 1, description = "Root directory in which the images are saved")
+    @Path(mustExist = true, kind = PathKind.DIRECTORY)
+    @Once
     private String saveRootDirectory;
 
     @Option(name = { "-f",
-        "--fromPage" }, description = "Harvesting starts from this page (default is page 1 when this option is missing)")
+        "--fromPage" }, arity = 1, description = "Harvesting starts from this page (default is page 1 when this option is missing)")
     @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int fromPage = 1;
 
     @Option(name = { "-t",
-        "--toPage" }, description = "Harvesting stops at this page (default is last page when this option is missing)")
+        "--toPage" }, arity = 1, description = "Harvesting stops at this page (default is last page when this option is missing)")
     @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int toPage = Integer.MAX_VALUE;
 
     @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
+    @Once
     private boolean force;
 
     @Option(name = { "-s",
-        "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded (default is not to stop when this option is missing)")
+        "--stop-after-already-downloaded-pages" }, arity = 1, description = "Harvesting stops after the nth page which is already fully downloaded (default is not to stop when this option is missing)")
     @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int stopAfterAlreadyDownloadedPages;
 
     @Option(name = {
-        "--threads" }, description = "Number of threads to download the images (default is 4 when this option is missing)")
+        "--threads" }, arity = 1, description = "Number of threads to download the images (default is 4 when this option is missing)")
     @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
 
     @Option(name = {
-        "--convert-to-jpg" }, description = "Convert the downloaded images to JPG format with the given compression ratio (default is not to convert when this option is missing")
+        "--convert-to-jpg" }, arity = 1, description = "Convert the downloaded images to JPG format with the given compression ratio (default is not to convert when this option is missing")
     @IntegerRange(min = 1, minInclusive = true, max = 100, maxInclusive = true)
+    @Once
     private int jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
 
     @AirlineModule
