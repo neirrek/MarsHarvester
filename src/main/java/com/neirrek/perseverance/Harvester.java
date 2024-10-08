@@ -111,6 +111,8 @@ public class Harvester {
 
     private static final String FIREFOX_BIN_PATH_PROPERTY = "webdriver.firefox.bin";
 
+    private static final String SLF4J_INTERNAL_VERBOSITY_PROPERTY = "slf4j.internal.verbosity";
+
     private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
 
     private static final int DEFAULT_JPG_COMPRESSION_RATIO = 0;
@@ -138,6 +140,8 @@ public class Harvester {
         System.setProperty(GeckoDriverService.GECKO_DRIVER_LOG_PROPERTY, "/dev/null");
         // And disabling the useless Selenium logs not to pollute the logs
         java.util.logging.Logger.getLogger("org.openqa.selenium").setLevel(Level.OFF);
+        // And setting SLF4J internal verbosity to WARN to avoid useless logs
+        System.setProperty(SLF4J_INTERNAL_VERBOSITY_PROPERTY, "WARN");
     }
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
