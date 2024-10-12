@@ -19,20 +19,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
-import javax.inject.Inject;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
+import org.openqa.selenium.firefox.GeckoDriverService;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
@@ -40,8 +41,13 @@ import org.slf4j.LoggerFactory;
 
 import com.github.rvesse.airline.HelpOption;
 import com.github.rvesse.airline.SingleCommand;
+import com.github.rvesse.airline.annotations.AirlineModule;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
+import com.github.rvesse.airline.annotations.restrictions.Once;
+import com.github.rvesse.airline.annotations.restrictions.Path;
+import com.github.rvesse.airline.annotations.restrictions.PathKind;
+import com.github.rvesse.airline.annotations.restrictions.ranges.IntegerRange;
 
 /**
  * <p>
@@ -84,7 +90,11 @@ public class Harvester {
 
     private static final String GECKO_DRIVER_PATH_PROPERTY = "webdriver.gecko.driver";
 
-    private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 5;
+    private static final String FIREFOX_BIN_PATH_PROPERTY = "webdriver.firefox.bin";
+
+    private static final String SLF4J_INTERNAL_VERBOSITY_PROPERTY = "slf4j.internal.verbosity";
+
+    private static final int DEFAULT_DOWNLOAD_THREADS_NUMBER = 4;
 
     private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/msl/multimedia/raw-images/";
 
@@ -108,33 +118,51 @@ public class Harvester {
             System.setProperty(GECKO_DRIVER_PATH_PROPERTY, Config.getGeckoDriverPath());
         }
         // Redirecting the browser logs to /dev/null
-        System.setProperty(FirefoxDriver.SystemProperty.BROWSER_LOGFILE, "/dev/null");
+        System.setProperty(GeckoDriverService.GECKO_DRIVER_LOG_PROPERTY, "/dev/null");
         // And disabling the useless Selenium logs not to pollute the logs
         java.util.logging.Logger.getLogger("org.openqa.selenium").setLevel(Level.OFF);
+        // And setting SLF4J internal verbosity to WARN to avoid useless logs
+        System.setProperty(SLF4J_INTERNAL_VERBOSITY_PROPERTY, "WARN");
     }
 
     private final Logger logger = LoggerFactory.getLogger(Harvester.class);
 
-    @Option(name = { "-d", "--dir" }, description = "Root directory in which the images are saved")
+    @Option(name = { "-d", "--dir" }, arity = 1, //
+        description = "Root directory in which the images are saved")
+    @Path(mustExist = true, kind = PathKind.DIRECTORY)
+    @Once
     private String saveRootDirectory;
 
-    @Option(name = { "-f", "--fromPage" }, description = "Harvesting starts from this page")
+    @Option(name = { "-f", "--fromPage" }, arity = 1, //
+        description = "Harvesting starts from this page (default is page 1 when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int fromPage = 1;
 
-    @Option(name = { "-t", "--toPage" }, description = "Harvesting stops at this page")
+    @Option(name = { "-t", "--toPage" }, arity = 1, //
+        description = "Harvesting stops at this page (default is last page when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int toPage = Integer.MAX_VALUE;
 
-    @Option(name = { "--force" }, description = "Force harvesting already downloaded images")
+    @Option(name = { "--force" }, //
+        description = "Force harvesting already downloaded images")
+    @Once
     private boolean force;
 
-    @Option(name = { "-s",
-            "--stop-after-already-downloaded-pages" }, description = "Harvesting stops after the nth page which is already fully downloaded")
+    @Option(name = { "-s", "--stop-after-already-downloaded-pages" }, arity = 1, //
+        description = "Harvesting stops after the nth page which is already fully downloaded (default is not to stop when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int stopAfterAlreadyDownloadedPages = -1;
 
-    @Option(name = { "--threads" }, description = "Number of threads to download the images (default is 5)")
+    @Option(name = { "--threads" }, arity = 1, //
+        description = "Number of threads to download the images (default is 4 when this option is missing)")
+    @IntegerRange(min = 1, minInclusive = true)
+    @Once
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
 
-    @Inject
+    @AirlineModule
     private HelpOption<Harvester> help;
 
     private CompletionService<Boolean> downloadImageService;
@@ -180,7 +208,7 @@ public class Harvester {
         goToPage(page);
         List<String> imagesUrls = getImagesUrls();
         for (String imageUrl : imagesUrls) {
-            downloadImageService.submit(new DownloadImageCallable(imageUrl));
+            downloadImageService.submit(new ImageDownloader(imageUrl));
         }
         boolean pageAlreadyDownloaded = true;
         try {
@@ -191,7 +219,7 @@ public class Harvester {
             Thread.currentThread().interrupt();
         } catch (ExecutionException e) {
             throw new HarvesterException(String.format("An error occurred while downloading page %s", page),
-                    e.getCause());
+                e.getCause());
         }
         if (pageAlreadyDownloaded) {
             logger.info("Page already fully downloaded!");
@@ -205,7 +233,8 @@ public class Harvester {
             driver.quit();
         }
         FirefoxOptions firefoxOptions = new FirefoxOptions();
-        firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
+        firefoxOptions.setBinary(Config.getFirefoxBinPath());
+        firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=2560,1440");
         driver = new FirefoxDriver(firefoxOptions);
         driver.manage().timeouts().implicitlyWait(Duration.ofMillis(500));
         driver.get(RAW_IMAGES_URL);
@@ -222,11 +251,11 @@ public class Harvester {
         int retry = 0;
         WebDriverException exception = null;
         while (!ok && retry < 10) {
-            paginationInput.clear();
+            scrollIntoView(paginationInput).clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
-                new WebDriverWait(driver, Duration.ofSeconds(10)).until(
-                        ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
+                new WebDriverWait(driver, Duration.ofSeconds(10))
+                    .until(ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
                 exception = null;
                 ok = true;
             } catch (TimeoutException e) {
@@ -241,24 +270,27 @@ public class Harvester {
     }
 
     private List<String> getImagesUrls() {
-        return driver.findElements(By.className("raw_list_image_inner")).stream()
-                .map(e -> e.findElement(By.tagName("img"))).map(e -> RegExUtils.replacePattern(e.getAttribute("src"),
-                        THUMBNAIL_IMAGES_PATTERN_1, LARGE_IMAGES_PATTERN_1))
-                .collect(Collectors.toList());
+        return new WebDriverWait(driver, Duration.ofSeconds(10)) //
+            .ignoring(StaleElementReferenceException.class) //
+            .until(d -> d.findElements(By.className("raw_list_image_inner")).stream() //
+                .map(e -> e.findElement(By.tagName("img"))) //
+                .map(e -> RegExUtils.replacePattern(e.getAttribute("src"), THUMBNAIL_IMAGES_PATTERN_1,
+                    LARGE_IMAGES_PATTERN_1)) //
+                .collect(Collectors.toList()));
     }
 
     private void logStartPage(int page, int nbPages) {
-        logPagePart(PagePart.START, page, nbPages);
+        logPagePart("Start", page, nbPages);
     }
 
     private void printEndPage(int page, int nbPages) {
-        logPagePart(PagePart.END, page, nbPages);
+        logPagePart("End", page, nbPages);
     }
 
-    private void logPagePart(PagePart pagePart, int page, int nbPages) {
+    private void logPagePart(String pagePart, int page, int nbPages) {
         if (logger.isInfoEnabled()) {
-            String message = StringUtils.rightPad(String.format("====[%s of page %s/%s]",
-                    StringUtils.capitalize(pagePart.name().toLowerCase()), page, nbPages), 148, "=");
+            String message = StringUtils.rightPad(String.format("====[%s of page %s/%s]", pagePart, page, nbPages), 148,
+                "=");
             logger.info(message);
         }
     }
@@ -272,11 +304,21 @@ public class Harvester {
         return helpShown;
     }
 
-    private class DownloadImageCallable implements Callable<Boolean> {
+    private WebElement scrollIntoView(WebElement webElement) {
+        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", webElement);
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return webElement;
+    }
+
+    private class ImageDownloader implements Callable<Boolean> {
 
         private String imageUrl;
 
-        public DownloadImageCallable(String imageUrl) {
+        public ImageDownloader(String imageUrl) {
             this.imageUrl = imageUrl;
         }
 
@@ -285,10 +327,10 @@ public class Harvester {
             String imagePath;
             if (imageUrl.matches(IMAGE_URL_PATTERN_1)) {
                 imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
-                        RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_1, IMAGE_PATH_PATTERN_1));
+                    RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_1, IMAGE_PATH_PATTERN_1));
             } else if (imageUrl.matches(IMAGE_URL_PATTERN_2)) {
                 imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
-                        RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_2, IMAGE_PATH_PATTERN_2));
+                    RegExUtils.replacePattern(imageUrl, IMAGE_URL_PATTERN_2, IMAGE_PATH_PATTERN_2));
             } else {
                 logger.info("/!\\ Unable to download image: {}", imageUrl);
                 return false;
@@ -303,8 +345,8 @@ public class Harvester {
                     logImageDownload(toDownload, retry);
                     InputStream bodyStream = null;
                     try (FileOutputStream out = new FileOutputStream(file)) {
-                        bodyStream = Jsoup.connect(imageUrl).ignoreContentType(true).maxBodySize(0).execute()
-                                .bodyStream();
+                        bodyStream = Jsoup.connect(imageUrl).timeout(0).ignoreContentType(true).maxBodySize(0).execute()
+                            .bodyStream();
                         IOUtils.copy(bodyStream, out);
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
@@ -319,11 +361,11 @@ public class Harvester {
                         retry++;
                     } finally {
                         IOUtils.closeQuietly(bodyStream,
-                                e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
+                            e -> logger.debug("Unable to close the response body stream: {}", e.getMessage()));
                     }
                 }
             } else {
-                logImageDownload(toDownload, 0);
+                // logImageDownload(toDownload, 0);
             }
             return downloaded;
         }
@@ -338,10 +380,6 @@ public class Harvester {
             }
         }
 
-    }
-
-    private enum PagePart {
-        START, END;
     }
 
     private static class Config {
@@ -367,6 +405,10 @@ public class Harvester {
 
         static String getGeckoDriverPath() {
             return getInstance().getProperty(GECKO_DRIVER_PATH_PROPERTY);
+        }
+
+        static String getFirefoxBinPath() {
+            return getInstance().getProperty(FIREFOX_BIN_PATH_PROPERTY);
         }
 
         private String getProperty(String propertyName) {
