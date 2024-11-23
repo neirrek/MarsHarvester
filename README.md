@@ -1,14 +1,16 @@
-PerseveranceHarvester
+MarsHarvester
 =====================
 ![Perseverance](https://i.imgur.com/ExA4dY8.png "Image Credit: NASA/JPL-Caltech")
 
 What is it?
 -----------
-**PerseveranceHarvester** is a **standalone Java program** to download the raw images taken by the Mars rover **Perseverance** which are available on the **NASA** website at the following URL: <https://mars.nasa.gov/mars2020/multimedia/raw-images/>
+**MarsHarvester** is a **standalone Java program** to download the raw images taken by the Mars rovers **Perseverance** and **Curiosity** which are available on the **NASA** website at the following URL:
+- **Perseverance:** <https://mars.nasa.gov/mars2020/multimedia/raw-images/>
+- **Curiosity:** <https://mars.nasa.gov/msl/multimedia/raw-images/>
 
 Requirements
 ------------
-Running **PerseveranceHarvester** requires **Java 17** at least.
+Running **MarsHarvester** requires **Java 17** at least.
 
 Packaging
 ---------
@@ -21,21 +23,21 @@ Executing
 ---------
 Launch the harvester by executing the following command:
 ```
-java -jar perseverance-harvester-X.Y.Z.jar -d /path/to/save/root/dir
+java -jar mars-harvester-X.Y.Z.jar --mission <PERSEVERANCE|CURIOSITY> -dir /path/to/save/root/dir
 ```
 
 Usage
 -----
 ```
 NAME
-        perseverance-harvester - Perseverance raw images harvester command
+        mars-harvester - Mars rovers raw images harvester command
 
 SYNOPSIS
-        perseverance-harvester [ --convert-to-jpg <jpgCompressionRatio> ]
+        mars-harvester [ --convert-to-jpg <jpgCompressionRatio> ]
                 [ {-d | --dir} <saveRootDirectory> ]
                 [ {-f | --fromPage} <fromPage> ]
-                [ --force ]
-                [ {-h | --help} ]
+                [ --force ] [ {-h | --help} ]
+                [ {-m | --mission} <mission> ]
                 [ {-s | --stop-after-already-downloaded-pages} <stopAfterAlreadyDownloadedPages> ]
                 [ {-t | --toPage} <toPage> ]
                 [ --threads <downloadThreadsNumber> ]
@@ -81,6 +83,16 @@ OPTIONS
 
         -h, --help
             Display help information
+
+        -m <mission>, --mission <mission>
+            Name of the Mars mission
+
+            This options value is restricted to the following set of values:
+                CURIOSITY
+                PERSEVERANCE
+
+            This option may occur a maximum of 1 times
+
 
         -s <stopAfterAlreadyDownloadedPages>,
         --stop-after-already-downloaded-pages <stopAfterAlreadyDownloadedPages>

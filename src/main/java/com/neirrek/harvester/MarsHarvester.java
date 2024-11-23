@@ -1,4 +1,6 @@
-package com.neirrek.perseverance;
+package com.neirrek.harvester;
+
+import static java.util.Map.entry;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -9,6 +11,8 @@ import java.text.NumberFormat;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
@@ -44,6 +48,7 @@ import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
@@ -59,6 +64,7 @@ import com.github.rvesse.airline.SingleCommand;
 import com.github.rvesse.airline.annotations.AirlineModule;
 import com.github.rvesse.airline.annotations.Command;
 import com.github.rvesse.airline.annotations.Option;
+import com.github.rvesse.airline.annotations.restrictions.AllowedValues;
 import com.github.rvesse.airline.annotations.restrictions.Once;
 import com.github.rvesse.airline.annotations.restrictions.Path;
 import com.github.rvesse.airline.annotations.restrictions.PathKind;
@@ -66,14 +72,20 @@ import com.github.rvesse.airline.annotations.restrictions.ranges.IntegerRange;
 
 /**
  * <p>
- * A class that downloads the raw images taken by the Mars rover Perseverance
- * that are available on the NASA website at the following URL: <a href=
- * "https://mars.nasa.gov/mars2020/multimedia/raw-images">https://mars.nasa.gov/mars2020/multimedia/raw-images</a>
+ * A class that downloads the raw images taken by the Mars rovers Perseverance
+ * and Curiosity that are available on the NASA website at the following URLs: -
+ * Perseverance: <a href=
+ * "https://mars.nasa.gov/mars2020/multimedia/raw-images/">https://mars.nasa.gov/mars2020/multimedia/raw-images/</a>
  * </p>
+ * - Curiosity: <a href=
+ * "https://mars.nasa.gov/msl/multimedia/raw-images/">https://mars.nasa.gov/msl/multimedia/raw-images/</a>
  * <p>
  * This class can be executed as a command with the following parameters:
  * 
  * <pre>
+ *  -m [mission], --mission [mission]
+ *      Name of the Mars mission (CURIOSITY or PERSEVERANCE)
+ *       
  *  -d [saveRootDirectory], --dir [saveRootDirectory]
  *      Root directory in which the images are saved
  *      
@@ -104,8 +116,8 @@ import com.github.rvesse.airline.annotations.restrictions.ranges.IntegerRange;
  * @author Bruno Kerrien
  *
  */
-@Command(name = "perseverance-harvester", description = "Perseverance raw images harvester command")
-public class Harvester {
+@Command(name = "mars-harvester", description = "Mars rovers raw images harvester command")
+public class MarsHarvester {
 
     private static final String GECKO_DRIVER_PATH_PROPERTY = "webdriver.gecko.driver";
 
@@ -118,16 +130,6 @@ public class Harvester {
     private static final int DEFAULT_JPG_COMPRESSION_RATIO = 0;
 
     private static final int MAX_JPG_COMPRESSION_RATIO = 100;
-
-    private static final String RAW_IMAGES_URL = "https://mars.nasa.gov/mars2020/multimedia/raw-images/";
-
-    private static final String IMAGES_URL_PATTERN = "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-zA-Z]+)\\/browse\\/([a-zA-Z]+)\\/(.+)\\.png$";
-
-    private static final String IMAGES_SAVE_PATH_PATTERN = "$1\\/$2\\/$3\\/$4%s";
-
-    private static final String THUMBNAIL_IMAGES_SUFFIX = "_320.jpg";
-
-    private static final String LARGE_IMAGES_SUFFIX = ImageFormat.PNG.getExtension();
 
     static {
         // If the JVM property "webdriver.gecko.driver", which defines
@@ -144,7 +146,12 @@ public class Harvester {
         System.setProperty(SLF4J_INTERNAL_VERBOSITY_PROPERTY, "WARN");
     }
 
-    private final Logger logger = LoggerFactory.getLogger(Harvester.class);
+    private final Logger logger = LoggerFactory.getLogger(MarsHarvester.class);
+
+    @Option(name = { "-m", "--mission" }, arity = 1, description = "Name of the Mars mission")
+    @AllowedValues(allowedValues = { "CURIOSITY", "PERSEVERANCE" })
+    @Once
+    private Mission mission;
 
     @Option(name = { "-d", "--dir" }, arity = 1, description = "Root directory in which the images are saved")
     @Path(mustExist = true, kind = PathKind.DIRECTORY)
@@ -186,7 +193,7 @@ public class Harvester {
     private int jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
 
     @AirlineModule
-    private HelpOption<Harvester> help;
+    private HelpOption<MarsHarvester> help;
 
     private CompletionService<Boolean> downloadImageService;
 
@@ -194,29 +201,32 @@ public class Harvester {
 
     private WebElement paginationInput;
 
-    private ImageFormat imagesSaveFormat = ImageFormat.PNG;
+    private SaveMode saveMode = SaveMode.AS_IS;
 
     private AtomicInteger nbDownloadedImages = new AtomicInteger(0);
 
     public static void main(String[] args) {
-        SingleCommand<Harvester> parser = SingleCommand.singleCommand(Harvester.class);
-        Harvester harvester = parser.parse(args);
+        SingleCommand<MarsHarvester> parser = SingleCommand.singleCommand(MarsHarvester.class);
+        MarsHarvester harvester = parser.parse(args);
         if (!harvester.showHelp()) {
             harvester.execute();
         }
     }
 
     private void execute() {
-        initializeDriverAndPagination();
-        if (jpgCompressionRatio < DEFAULT_JPG_COMPRESSION_RATIO) {
+        if (jpgCompressionRatio <= DEFAULT_JPG_COMPRESSION_RATIO) {
             jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
         } else {
-            imagesSaveFormat = ImageFormat.JPG;
+            saveMode = SaveMode.CONVERT_TO_JPG;
             jpgCompressionRatio = Math.min(jpgCompressionRatio, MAX_JPG_COMPRESSION_RATIO);
         }
         ExecutorService executorService = Executors.newFixedThreadPool(downloadThreadsNumber);
         downloadImageService = new ExecutorCompletionService<>(executorService);
-        int maxPage = Math.min(getNumberOfPages(), toPage);
+        int maxPage = 0;
+        while (maxPage == 0) {
+            initializeDriverAndPagination();
+            maxPage = Math.min(getNumberOfPages(), toPage);
+        }
         boolean stop = false;
         int nbPagesAlreadyProcessed = 0;
         for (int p = fromPage; p <= maxPage && !stop; p++) {
@@ -239,7 +249,7 @@ public class Harvester {
         goToPage(page);
         List<String> imagesUrls = getImagesUrls();
         for (String imageUrl : imagesUrls) {
-            downloadImageService.submit(new ImageDownloader(imageUrl, saveRootDirectory, imagesSaveFormat,
+            downloadImageService.submit(new ImageDownloader(mission, imageUrl, saveRootDirectory, saveMode,
                 jpgCompressionRatio, force, nbDownloadedImages, logger));
         }
         boolean pageAlreadyDownloaded = true;
@@ -269,8 +279,8 @@ public class Harvester {
         firefoxOptions.addArguments("--headless", "--disable-gpu", "--window-size=2560,1440");
         driver = new FirefoxDriver(firefoxOptions);
         driver.manage().timeouts().implicitlyWait(Duration.ofMillis(500));
-        driver.get(RAW_IMAGES_URL);
-        paginationInput = driver.findElement(By.id("header_pagination"));
+        driver.get(mission.getRawImagesUrl());
+        paginationInput = mission.getPaginationInput(driver);
     }
 
     private int getNumberOfPages() {
@@ -278,28 +288,35 @@ public class Harvester {
     }
 
     private void goToPage(int page) {
-        String startIndex = NumberFormat.getInstance(Locale.ENGLISH).format((page - 1) * 100 + 1L);
+        String startIndex = NumberFormat.getInstance(Locale.ENGLISH)
+            .format((page - 1) * mission.getNbImagesPerPage() + 1L);
         boolean ok = false;
         int retry = 0;
+        WebDriverException exception = null;
         while (!ok && retry < 10) {
             scrollIntoView(paginationInput).clear();
             paginationInput.sendKeys(String.valueOf(page));
             try {
                 new WebDriverWait(driver, Duration.ofSeconds(10))
                     .until(ExpectedConditions.textToBePresentInElementLocated(By.className("start_index"), startIndex));
+                exception = null;
                 ok = true;
             } catch (TimeoutException e) {
+                exception = e;
                 retry++;
                 logger.debug(e.getMessage(), e);
             }
+        }
+        if (exception != null) {
+            throw new HarvesterException(String.format("An error occurred while going to page %s", page), exception);
         }
     }
 
     private List<String> getImagesUrls() {
         return new WebDriverWait(driver, Duration.ofSeconds(10)).ignoring(StaleElementReferenceException.class)
-            .until(d -> d.findElements(By.className("raw_list_image_inner")).stream()
-                .map(e -> e.findElement(By.tagName("img")))
-                .map(e -> StringUtils.replace(e.getAttribute("src"), THUMBNAIL_IMAGES_SUFFIX, LARGE_IMAGES_SUFFIX))
+            .until(d -> d.findElements(By.className("raw_list_image_inner")).stream() //
+                .map(e -> e.findElement(By.tagName("img")).getAttribute("src")) //
+                .map(s -> mission.largeImageUrl(s)) //
                 .collect(Collectors.toList()));
     }
 
@@ -340,11 +357,13 @@ public class Harvester {
 
     private static class ImageDownloader implements Callable<Boolean> {
 
-        private final String imageUrl;
+        private final Mission mission;
+
+        private String imageUrl;
 
         private final String saveRootDirectory;
 
-        private final ImageFormat imagesSaveFormat;
+        private final SaveMode saveMode;
 
         private final float compressionQuality;
 
@@ -354,11 +373,12 @@ public class Harvester {
 
         private final Logger logger;
 
-        public ImageDownloader(String imageUrl, String saveRootDirectory, ImageFormat imagesSaveFormat,
+        public ImageDownloader(Mission mission, String imageUrl, String saveRootDirectory, SaveMode saveMode,
             int jpgConversionRatio, boolean force, AtomicInteger nbDownloadedImages, Logger logger) {
+            this.mission = mission;
             this.imageUrl = imageUrl;
             this.saveRootDirectory = saveRootDirectory;
-            this.imagesSaveFormat = imagesSaveFormat;
+            this.saveMode = saveMode;
             this.compressionQuality = (float) jpgConversionRatio / 100;
             this.force = force;
             this.nbDownloadedImages = nbDownloadedImages;
@@ -367,8 +387,13 @@ public class Harvester {
 
         @Override
         public Boolean call() throws Exception {
-            String imagePath = String.format("%s%s%s", saveRootDirectory, File.separator,
-                RegExUtils.replacePattern(imageUrl, IMAGES_URL_PATTERN, imagesSaveFormat.getImagesSavePathPattern()));
+            ImageFormat imageFormat = ImageFormat.forImageUrl(imageUrl);
+            ImageFormat targetImageFormat = saveMode.targetImageFormat(imageFormat);
+            String imagePath = mission.imagePath(imageUrl, saveRootDirectory, targetImageFormat);
+            if (imagePath == null) {
+                logger.info("/!\\ Unable to download image: {}", imageUrl);
+                return false;
+            }
             File file = new File(imagePath);
             boolean downloaded = false;
             boolean toDownload = !file.exists() || force;
@@ -384,10 +409,11 @@ public class Harvester {
                             .timeout(0) //
                             .maxBodySize(0) //
                             .execute().bodyStream();
-                        imagesSaveFormat.saveImage(bodyStream, file, this);
+                        saveMode.saveImage(bodyStream, imageFormat, file, this);
                         nbDownloadedImages.getAndIncrement();
                         downloaded = true;
                     } catch (IOException e) {
+                        imageUrl = mission.alternateImageUrl(imageUrl);
                         retry++;
                     } finally {
                         IOUtils.closeQuietly(bodyStream,
@@ -410,7 +436,7 @@ public class Harvester {
             }
         }
 
-        private void savePNGImageToFile(InputStream pngImageInputStream, File pngFile) throws IOException {
+        private void saveImageToFile(InputStream pngImageInputStream, File pngFile) throws IOException {
             try (FileOutputStream fileOutputStream = new FileOutputStream(pngFile)) {
                 IOUtils.copy(pngImageInputStream, fileOutputStream);
             }
@@ -444,15 +470,141 @@ public class Harvester {
 
     }
 
+    public enum Mission {
+
+        CURIOSITY( //
+            "https://mars.nasa.gov/msl/multimedia/raw-images/", //
+            PatternsMappings.ofEntries( //
+                entry( //
+                    "^https:\\/\\/.+\\/msss\\/(\\d{5})\\/([a-zA-Z]+)\\/(.+)\\.(jpg|JPG|png|PNG)$", //
+                    "$1\\/$2\\/$3%s"), //
+                entry( //
+                    "^https:\\/\\/.+(?:\\/proj\\/msl\\/redops)?\\/ods\\/surface\\/sol\\/(\\d{5})\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/([a-zA-Z]+)\\/(.+)\\.(jpg|JPG|png|PNG)$", //
+                    "$1\\/$2\\/$3\\/$4\\/$5%s")), //
+            PatternsMappings.ofEntries( //
+                entry( //
+                    "^(.+)-thm\\.jpg$", //
+                    "$1.JPG"), //
+                entry( //
+                    "^(.+)\\.PNG$", "$1.PNG"))) {
+            @Override
+            WebElement getPaginationInput(WebDriver driver) {
+                return driver.findElement(By.cssSelector("div#primary_column input.page_num"));
+            }
+
+            @Override
+            int getNbImagesPerPage() {
+                return 50;
+            }
+
+            @Override
+            String alternateImageUrl(String imageUrl) {
+                String urlJpgUpperCase = RegExUtils.replacePattern(imageUrl, "^(.+)\\.jpg$", "$1.JPG");
+                return imageUrl.equals(urlJpgUpperCase) ? RegExUtils.replacePattern(imageUrl, "^(.+)\\.JPG$", "$1.jpg")
+                    : urlJpgUpperCase;
+            }
+        }, //
+        PERSEVERANCE( //
+            "https://mars.nasa.gov/mars2020/multimedia/raw-images/", //
+            PatternsMappings.ofEntries( //
+                entry( //
+                    "^https:\\/\\/.+\\/pub\\/ods\\/surface\\/sol\\/(\\d{5})\\/ids\\/([a-zA-Z]+)\\/browse\\/([a-zA-Z]+)\\/(.+)\\.png$", //
+                    "$1\\/$2\\/$3\\/$4%s")), //
+            PatternsMappings.ofEntries( //
+                entry( //
+                    "^(.+)_320\\.jpg$", //
+                    "$1.png"))) {
+            @Override
+            WebElement getPaginationInput(WebDriver driver) {
+                return driver.findElement(By.id("header_pagination"));
+            }
+
+            @Override
+            int getNbImagesPerPage() {
+                return 100;
+            }
+
+            @Override
+            String alternateImageUrl(String imageUrl) {
+                return imageUrl;
+            }
+        };
+
+        private final String rawImagesUrl;
+
+        private final PatternsMappings imageUrlPathMappings;
+
+        private final PatternsMappings thumbnailLargeImagesUrlMappings;
+
+        private Mission(String rawImagesUrl, PatternsMappings imageUrlPathMappings,
+            PatternsMappings thumbnailLargeImagesUrlMappings) {
+            this.rawImagesUrl = rawImagesUrl;
+            this.imageUrlPathMappings = imageUrlPathMappings;
+            this.thumbnailLargeImagesUrlMappings = thumbnailLargeImagesUrlMappings;
+        }
+
+        String getRawImagesUrl() {
+            return rawImagesUrl;
+        }
+
+        String largeImageUrl(String thumbnailUrl) {
+            return thumbnailLargeImagesUrlMappings.largeImageUrl(thumbnailUrl);
+
+        }
+
+        String imagePath(String imageUrl, String saveRootDirectory, ImageFormat saveImageFormat) {
+            return imageUrlPathMappings.imagePath(imageUrl, saveRootDirectory, saveImageFormat);
+        }
+
+        abstract WebElement getPaginationInput(WebDriver driver);
+
+        abstract int getNbImagesPerPage();
+
+        abstract String alternateImageUrl(String imageUrl);
+
+    }
+
+    private enum SaveMode {
+
+        AS_IS {
+            @Override
+            ImageFormat targetImageFormat(ImageFormat originalImageFormat) {
+                return originalImageFormat;
+            }
+
+            @Override
+            void saveImage(InputStream imageInputStream, ImageFormat fromImageFormat, File imageFile,
+                ImageDownloader imageDownloader) throws IOException {
+                imageDownloader.saveImageToFile(imageInputStream, imageFile);
+            }
+        },
+        CONVERT_TO_JPG {
+            @Override
+            ImageFormat targetImageFormat(ImageFormat originalImageFormat) {
+                return ImageFormat.JPG;
+            }
+
+            @Override
+            void saveImage(InputStream imageInputStream, ImageFormat fromImageFormat, File imageFile,
+                ImageDownloader imageDownloader) throws IOException {
+                if (fromImageFormat == ImageFormat.JPG) {
+                    AS_IS.saveImage(imageInputStream, fromImageFormat, imageFile, imageDownloader);
+                } else {
+                    imageDownloader.convertPNGImageToJPG(imageInputStream, imageFile);
+                }
+            }
+        };
+
+        abstract ImageFormat targetImageFormat(ImageFormat originalImageFormat);
+
+        abstract void saveImage(InputStream imageInputStream, ImageFormat fromImageFormat, File imageFile,
+            ImageDownloader imageDownloader) throws IOException;
+
+    }
+
     private enum ImageFormat {
 
         PNG {
-            @Override
-            void saveImage(InputStream imageInputStream, File imageFile, ImageDownloader imageDownloader)
-                throws IOException {
-                imageDownloader.savePNGImageToFile(imageInputStream, imageFile);
-            }
-
             @Override
             String getMetadataNativeFormatName() {
                 return "javax_imageio_png_1.0";
@@ -480,12 +632,6 @@ public class Harvester {
         }, //
         JPG {
             @Override
-            void saveImage(InputStream imageInputStream, File imageFile, ImageDownloader imageDownloader)
-                throws IOException {
-                imageDownloader.convertPNGImageToJPG(imageInputStream, imageFile);
-            }
-
-            @Override
             String getMetadataNativeFormatName() {
                 return "javax_imageio_jpeg_image_1.0";
             }
@@ -511,7 +657,9 @@ public class Harvester {
             }
         };
 
-        private final String imagesSavePathPattern = String.format(IMAGES_SAVE_PATH_PATTERN, getExtension());
+        static ImageFormat forImageUrl(String imageUrl) {
+            return ImageFormat.valueOf(StringUtils.upperCase(StringUtils.substringAfterLast(imageUrl, ".")));
+        }
 
         static ImageFormat forMetadataNativeFormatName(String metadataNativeFormatName) {
             return Stream.of(ImageFormat.values()) //
@@ -528,10 +676,6 @@ public class Harvester {
             return name().toLowerCase();
         }
 
-        String getImagesSavePathPattern() {
-            return imagesSavePathPattern;
-        }
-
         ImageReader getImageReader() {
             return ImageIO.getImageReadersByFormatName(getName()).next();
         }
@@ -539,9 +683,6 @@ public class Harvester {
         ImageWriter getImageWriter() {
             return ImageIO.getImageWritersByFormatName(getName()).next();
         }
-
-        abstract void saveImage(InputStream imageInputStream, File imageFile, ImageDownloader imageDownloader)
-            throws IOException;
 
         abstract String getMetadataNativeFormatName();
 
@@ -592,6 +733,40 @@ public class Harvester {
             metadataImageInfoTag.setAttribute(imageFormat.getMetadataWidthAttribute(), width);
             metadataImageInfoTag.setAttribute(imageFormat.getMetadataHeightAttribute(), height);
             metadata.setFromTree(imageFormat.getMetadataNativeFormatName(), metadataTree);
+        }
+
+    }
+
+    private static class PatternsMappings {
+
+        private final Map<String, String> patternsMappings;
+
+        public PatternsMappings(Map<String, String> patternsMappings) {
+            this.patternsMappings = patternsMappings;
+        }
+
+        @SafeVarargs
+        static PatternsMappings ofEntries(Entry<String, String>... entries) {
+            return new PatternsMappings(Map.ofEntries(entries));
+        }
+
+        String imagePath(String imageUrl, String saveRootDirectory, ImageFormat saveImageFormat) {
+            Entry<String, String> patternsMapping = patternsMappings.entrySet().stream() //
+                .filter(e -> imageUrl.matches(e.getKey())) //
+                .findFirst() //
+                .orElseThrow(() -> new RuntimeException(
+                    String.format("No matching pattern found for image URL '%s'", imageUrl)));
+            return String.format("%s%s%s", saveRootDirectory, File.separator, RegExUtils.replacePattern(imageUrl,
+                patternsMapping.getKey(), String.format(patternsMapping.getValue(), saveImageFormat.getExtension())));
+        }
+
+        String largeImageUrl(String thumbnailUrl) {
+            Entry<String, String> patternsMapping = patternsMappings.entrySet().stream() //
+                .filter(e -> thumbnailUrl.matches(e.getKey())) //
+                .findFirst() //
+                .orElseThrow(() -> new RuntimeException(
+                    String.format("No matching pattern found for thumbnail URL '%s'", thumbnailUrl)));
+            return RegExUtils.replacePattern(thumbnailUrl, patternsMapping.getKey(), patternsMapping.getValue());
         }
 
     }
