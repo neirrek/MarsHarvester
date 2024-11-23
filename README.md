@@ -23,7 +23,7 @@ Executing
 ---------
 Launch the harvester by executing the following command:
 ```
-java -jar mars-harvester-X.Y.Z.jar --mission <PERSEVERANCE|CURIOSITY> -dir /path/to/save/root/dir
+java -jar mars-harvester-X.Y.Z.jar --mission <PERSEVERANCE|CURIOSITY> --dir /path/to/save/root/dir
 ```
 
 Usage
