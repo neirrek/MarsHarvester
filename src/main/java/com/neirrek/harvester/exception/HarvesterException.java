@@ -23,8 +23,11 @@
  */
 package com.neirrek.harvester.exception;
 
+import java.io.Serial;
+
 public class HarvesterException extends RuntimeException {
 
+    @Serial
     private static final long serialVersionUID = 5443873764986661772L;
 
     public HarvesterException(String message, Throwable cause) {

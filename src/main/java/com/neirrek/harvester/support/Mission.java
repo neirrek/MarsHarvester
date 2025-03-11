@@ -102,7 +102,7 @@ public enum Mission {
 
     private final PatternsMappings thumbnailLargeImagesUrlMappings;
 
-    private Mission(String rawImagesUrl, PatternsMappings imageUrlPathMappings,
+    Mission(String rawImagesUrl, PatternsMappings imageUrlPathMappings,
         PatternsMappings thumbnailLargeImagesUrlMappings) {
         this.rawImagesUrl = rawImagesUrl;
         this.imageUrlPathMappings = imageUrlPathMappings;
@@ -128,13 +128,7 @@ public enum Mission {
 
     abstract String alternateImageUrl(String imageUrl);
 
-    private static class PatternsMappings {
-
-        private final Map<String, String> patternsMappings;
-
-        public PatternsMappings(Map<String, String> patternsMappings) {
-            this.patternsMappings = patternsMappings;
-        }
+    private record PatternsMappings(Map<String, String> patternsMappings) {
 
         @SafeVarargs
         static PatternsMappings ofEntries(Entry<String, String>... entries) {

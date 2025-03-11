@@ -98,7 +98,7 @@ public class ImageDownloader implements Callable<Boolean> {
             FileUtils.forceMkdirParent(file);
             int retry = 0;
             while (!downloaded && retry <= 5) {
-                logImageDownload(toDownload, retry);
+                logImageDownload(true, retry);
                 InputStream bodyStream = null;
                 try {
                     bodyStream = Jsoup.connect(imageUrl) //
@@ -129,7 +129,7 @@ public class ImageDownloader implements Callable<Boolean> {
             if (toDownload) {
                 bullet = retry > 0 ? "!" : "*";
             }
-            logger.info(String.format("%s %s", bullet, imageUrl));
+            logger.info("{} {}", bullet, imageUrl);
         }
     }
 
@@ -165,19 +165,7 @@ public class ImageDownloader implements Callable<Boolean> {
         }
     }
 
-    private static class ImageMetadata {
-
-        private String bitDepth;
-
-        private String width;
-
-        private String height;
-
-        private ImageMetadata(String bitDepth, String width, String height) {
-            this.bitDepth = bitDepth;
-            this.width = width;
-            this.height = height;
-        }
+    private record ImageMetadata(String bitDepth, String width, String height) {
 
         static ImageMetadata from(IIOMetadata metadata) {
             ImageFormat imageFormat = ImageFormat.forMetadataNativeFormatName(metadata.getNativeMetadataFormatName());
@@ -186,7 +174,7 @@ public class ImageDownloader implements Callable<Boolean> {
             }
             Element metadataTree = (Element) metadata.getAsTree(imageFormat.getMetadataNativeFormatName());
             Element metadataImageInfoTag = (Element) metadataTree
-                .getElementsByTagName(imageFormat.getMetadataImageInfoTag()).item(0);
+                    .getElementsByTagName(imageFormat.getMetadataImageInfoTag()).item(0);
             String bitDepth = metadataImageInfoTag.getAttribute(imageFormat.getMetadataBitDepthAttribute());
             String width = metadataImageInfoTag.getAttribute(imageFormat.getMetadataWidthAttribute());
             String height = metadataImageInfoTag.getAttribute(imageFormat.getMetadataHeightAttribute());
@@ -197,7 +185,7 @@ public class ImageDownloader implements Callable<Boolean> {
             ImageFormat imageFormat = ImageFormat.forMetadataNativeFormatName(metadata.getNativeMetadataFormatName());
             Element metadataTree = (Element) metadata.getAsTree(imageFormat.getMetadataNativeFormatName());
             Element metadataImageInfoTag = (Element) metadataTree
-                .getElementsByTagName(imageFormat.getMetadataImageInfoTag()).item(0);
+                    .getElementsByTagName(imageFormat.getMetadataImageInfoTag()).item(0);
             metadataImageInfoTag.setAttribute(imageFormat.getMetadataBitDepthAttribute(), bitDepth);
             metadataImageInfoTag.setAttribute(imageFormat.getMetadataWidthAttribute(), width);
             metadataImageInfoTag.setAttribute(imageFormat.getMetadataHeightAttribute(), height);
@@ -273,7 +261,7 @@ public class ImageDownloader implements Callable<Boolean> {
         }
 
         String getExtension() {
-            return new StringBuffer(".").append(getName()).toString();
+            return "." + getName();
         }
 
         String getName() {

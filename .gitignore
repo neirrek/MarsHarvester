@@ -17,6 +17,7 @@
 .classpath
 .project
 .settings
+.idea
 target
 *.bak
 dependency-reduced-pom.xml

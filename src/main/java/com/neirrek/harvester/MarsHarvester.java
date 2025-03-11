@@ -139,13 +139,13 @@ public class MarsHarvester {
 
     @Option(name = { "-f",
         "--fromPage" }, arity = 1, description = "Harvesting starts from this page (default is page 1 when this option is missing)")
-    @IntegerRange(min = 1, minInclusive = true)
+    @IntegerRange(min = 1)
     @Once
     private int fromPage = 1;
 
     @Option(name = { "-t",
         "--toPage" }, arity = 1, description = "Harvesting stops at this page (default is last page when this option is missing)")
-    @IntegerRange(min = 1, minInclusive = true)
+    @IntegerRange(min = 1)
     @Once
     private int toPage = Integer.MAX_VALUE;
 
@@ -155,19 +155,19 @@ public class MarsHarvester {
 
     @Option(name = { "-s",
         "--stop-after-already-downloaded-pages" }, arity = 1, description = "Harvesting stops after the nth page which is already fully downloaded (default is not to stop when this option is missing)")
-    @IntegerRange(min = 1, minInclusive = true)
+    @IntegerRange(min = 1)
     @Once
     private int stopAfterAlreadyDownloadedPages;
 
     @Option(name = {
         "--threads" }, arity = 1, description = "Number of threads to download the images (default is 4 when this option is missing)")
-    @IntegerRange(min = 1, minInclusive = true)
+    @IntegerRange(min = 1)
     @Once
     private int downloadThreadsNumber = DEFAULT_DOWNLOAD_THREADS_NUMBER;
 
     @Option(name = {
         "--convert-to-jpg" }, arity = 1, description = "Convert the downloaded images to JPG format with the given compression ratio (default is not to convert when this option is missing")
-    @IntegerRange(min = 1, minInclusive = true, max = 100, maxInclusive = true)
+    @IntegerRange(min = 1, max = 100)
     @Once
     private int jpgCompressionRatio = DEFAULT_JPG_COMPRESSION_RATIO;
 
@@ -218,7 +218,7 @@ public class MarsHarvester {
         }
         driver.quit();
         if (logger.isInfoEnabled()) {
-            logger.info(String.format("%s images downloaded", nbDownloadedImages));
+            logger.info("{} images downloaded", nbDownloadedImages);
         }
         executorService.shutdown();
     }
@@ -268,7 +268,7 @@ public class MarsHarvester {
 
     private void goToPage(int page) {
         String startIndex = NumberFormat.getInstance(Locale.ENGLISH)
-            .format((page - 1) * mission.getNbImagesPerPage() + 1L);
+            .format((long) (page - 1) * mission.getNbImagesPerPage() + 1L);
         boolean ok = false;
         int retry = 0;
         WebDriverException exception = null;
