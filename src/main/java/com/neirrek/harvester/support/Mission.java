@@ -36,6 +36,12 @@ import org.openqa.selenium.WebElement;
 
 import com.neirrek.harvester.support.ImageDownloader.ImageFormat;
 
+/**
+ * Enumeration representing different Mars missions and their associated configurations for handling
+ * raw image URLs, thumbnail URL mappings, and large image URL mappings.
+ * Each mission has specific methods for accessing pagination, image count per page, and alternate
+ * image URL handling.
+ */
 public enum Mission {
 
     CURIOSITY( //
@@ -109,23 +115,63 @@ public enum Mission {
         this.thumbnailLargeImagesUrlMappings = thumbnailLargeImagesUrlMappings;
     }
 
+    /**
+     * Retrieves the base URL for accessing raw images associated with the mission.
+     *
+     * @return A String representing the URL used to fetch raw images.
+     */
     public String getRawImagesUrl() {
         return rawImagesUrl;
     }
 
+    /**
+     * Converts a given thumbnail URL into its corresponding large image URL.
+     *
+     * @param thumbnailUrl The URL of the thumbnail image to be converted.
+     * @return A String representing the URL of the large image corresponding to the provided thumbnail URL.
+     * @throws RuntimeException if no matching pattern is found for the given thumbnail URL.
+     */
     public String largeImageUrl(String thumbnailUrl) {
         return thumbnailLargeImagesUrlMappings.largeImageUrl(thumbnailUrl);
 
     }
 
+    /**
+     * Generates the file system path where an image, specified by its URL, should be saved.
+     * The method maps the URL to a corresponding file path based on predefined patterns
+     * and appends the appropriate file extension based on the specified image format.
+     *
+     * @param imageUrl The URL of the image for which the file path should be generated.
+     * @param saveRootDirectory The root directory where the generated file path should be located.
+     * @param saveImageFormat The format in which the image will be saved, determining the file extension.
+     * @return A String representing the full file path for saving the image.
+     * @throws RuntimeException If no matching pattern is found for the given image URL.
+     */
     String imagePath(String imageUrl, String saveRootDirectory, ImageFormat saveImageFormat) {
         return imageUrlPathMappings.imagePath(imageUrl, saveRootDirectory, saveImageFormat);
     }
 
+    /**
+     * Retrieves the pagination input WebElement on a web page.
+     *
+     * @param driver The WebDriver instance used to interact with the web page.
+     * @return A WebElement representing the pagination input field.
+     */
     public abstract WebElement getPaginationInput(WebDriver driver);
 
+    /**
+     * Retrieves the number of images per page associated with the mission.
+     *
+     * @return An integer representing the number of images displayed per page.
+     */
     public abstract int getNbImagesPerPage();
 
+    /**
+     * Converts the given image URL to an alternate URL based on predefined mappings or rules.
+     *
+     * @param imageUrl The original URL of the image that needs to be converted to an alternate URL.
+     * @return A String representing the alternate URL for the given image URL.
+     */
     abstract String alternateImageUrl(String imageUrl);
 
     private record PatternsMappings(Map<String, String> patternsMappings) {

@@ -52,6 +52,13 @@ import org.jsoup.Jsoup;
 import org.slf4j.Logger;
 import org.w3c.dom.Element;
 
+/**
+ * The ImageDownloader class is responsible for downloading images from provided URLs and saving them
+ * to a specified directory. It supports various save modes, image formats, and optional compression
+ * quality for image conversion.
+ *
+ * This class implements the Callable interface to be used in a multithreaded environment.
+ */
 public class ImageDownloader implements Callable<Boolean> {
 
     private final Mission mission;
@@ -70,6 +77,18 @@ public class ImageDownloader implements Callable<Boolean> {
 
     private final Logger logger;
 
+    /**
+     * Constructs an ImageDownloader instance to download and process images based on the specified parameters.
+     *
+     * @param mission The mission associated with the image (e.g., CURIOSITY, PERSEVERANCE).
+     * @param imageUrl The URL of the image to be downloaded.
+     * @param saveRootDirectory The root directory where the downloaded image will be saved.
+     * @param saveMode The save mode specifying how the image should be processed (e.g., AS_IS or CONVERT_TO_JPG).
+     * @param jpgConversionRatio The compression quality ratio for JPG conversion (percentage from 0 to 100).
+     * @param force A boolean indicating whether to overwrite existing files.
+     * @param nbDownloadedImages An AtomicInteger to track the number of successfully downloaded images.
+     * @param logger The Logger instance used for logging download activities.
+     */
     public ImageDownloader(Mission mission, String imageUrl, String saveRootDirectory, SaveMode saveMode,
         int jpgConversionRatio, boolean force, AtomicInteger nbDownloadedImages, Logger logger) {
         this.mission = mission;
@@ -82,6 +101,20 @@ public class ImageDownloader implements Callable<Boolean> {
         this.logger = logger;
     }
 
+    /**
+     * Downloads an image from the specified URL, performs necessary processing based on the settings,
+     * and saves the image to the designated location. This method checks whether the image already
+     * exists and whether it should be overwritten based on the `force` parameter. If the image needs
+     * to be downloaded, it retries the download up to a maximum of 5 attempts in case of failure.
+     *
+     * The image format is determined based on the URL, and the appropriate target format and file
+     * path are calculated. The image is then saved using the provided save mode and additional
+     * configurations.
+     *
+     * @return A Boolean indicating whether the image was successfully downloaded and saved.
+     *         Returns {@code true} if the operation was successful, and {@code false} otherwise.
+     * @throws Exception If an unexpected error occurs during the image download or save process.
+     */
     @Override
     public Boolean call() throws Exception {
         ImageFormat imageFormat = ImageFormat.forImageUrl(imageUrl);
@@ -133,12 +166,28 @@ public class ImageDownloader implements Callable<Boolean> {
         }
     }
 
+    /**
+     * Saves a PNG image from the provided input stream to the specified file.
+     *
+     * @param pngImageInputStream The input stream containing the PNG image data to be saved.
+     * @param pngFile The file where the PNG image will be saved.
+     * @throws IOException If an I/O error occurs during the save operation.
+     */
     void saveImageToFile(InputStream pngImageInputStream, File pngFile) throws IOException {
         try (FileOutputStream fileOutputStream = new FileOutputStream(pngFile)) {
             IOUtils.copy(pngImageInputStream, fileOutputStream);
         }
     }
 
+    /**
+     * Converts a PNG image from the input stream into a JPG image and writes it to the specified file.
+     * This method handles reading and writing image metadata, applying compression settings, and ensuring
+     * the conversion process is accurate between the two image formats.
+     *
+     * @param pngImageInputStream The input stream containing the PNG image data to convert.
+     * @param jpgFile The target file where the converted JPG image will be saved.
+     * @throws IOException If an I/O error occurs during the conversion or write operation.
+     */
     void convertPNGImageToJPG(InputStream pngImageInputStream, File jpgFile) throws IOException {
         ImageReader pngReader = ImageFormat.PNG.getImageReader();
         ImageWriter jpgWriter = ImageFormat.JPG.getImageWriter();
@@ -194,6 +243,12 @@ public class ImageDownloader implements Callable<Boolean> {
 
     }
 
+    /**
+     * Represents an enumeration of supported image formats and provides utility methods
+     * for handling image metadata, extensions, and format-specific operations. Each image
+     * format comes with its own implementation to retrieve metadata attributes such as
+     * bit-depth, width, and height.
+     */
     enum ImageFormat {
 
         PNG {
@@ -249,10 +304,24 @@ public class ImageDownloader implements Callable<Boolean> {
             }
         };
 
+        /**
+         * Determines the image format based on the file extension of the provided image URL.
+         *
+         * @param imageUrl the URL or file path of the image, including its file extension
+         * @return the corresponding ImageFormat enumeration value based on the file extension
+         * @throws IllegalArgumentException if the file extension does not match any supported ImageFormat
+         * @throws NullPointerException if imageUrl is null
+         */
         static ImageFormat forImageUrl(String imageUrl) {
             return ImageFormat.valueOf(StringUtils.upperCase(StringUtils.substringAfterLast(imageUrl, ".")));
         }
 
+        /**
+         * Retrieves the ImageFormat enumeration value based on the provided metadata native format name.
+         *
+         * @param metadataNativeFormatName the native format name of the metadata to match against available ImageFormat values
+         * @return the corresponding ImageFormat enumeration value if a match is found, otherwise null
+         */
         static ImageFormat forMetadataNativeFormatName(String metadataNativeFormatName) {
             return Stream.of(ImageFormat.values()) //
                 .filter(i -> StringUtils.equals(i.getMetadataNativeFormatName(), metadataNativeFormatName)) //
@@ -260,34 +329,90 @@ public class ImageDownloader implements Callable<Boolean> {
                 .orElse(null);
         }
 
+        /**
+         * Retrieves the file extension associated with this image format.
+         *
+         * @return the file extension as a string, prefixed with a dot (e.g., ".png").
+         */
         String getExtension() {
             return "." + getName();
         }
 
+        /**
+         * Retrieves the name of this image format in lowercase.
+         *
+         * @return the name of the image format as a lowercase string
+         */
         String getName() {
             return name().toLowerCase();
         }
 
+        /**
+         * Retrieves an {@link ImageReader} instance for this image format.
+         *
+         * @return an ImageReader corresponding to this image format, obtained by matching the format name
+         */
         ImageReader getImageReader() {
             return ImageIO.getImageReadersByFormatName(getName()).next();
         }
 
+        /**
+         * Retrieves an {@link ImageWriter} instance for this image format.
+         *
+         * @return an ImageWriter corresponding to this image format, obtained by matching the format name
+         */
         ImageWriter getImageWriter() {
             return ImageIO.getImageWritersByFormatName(getName()).next();
         }
 
+        /**
+         * Retrieves the native metadata format name associated with this image format.
+         *
+         * @return the native metadata format name as a string.
+         */
         abstract String getMetadataNativeFormatName();
 
+        /**
+         * Retrieves the metadata image information tag associated with the image format.
+         *
+         * This method provides the specific metadata tag used to identify or describe image
+         * information within the metadata structure for the respective image format.
+         *
+         * @return the metadata image information tag as a string
+         */
         abstract String getMetadataImageInfoTag();
 
+        /**
+         * Retrieves the metadata attribute name used to represent the bit depth
+         * of an image in the respective image format.
+         *
+         * @return the metadata attribute name as a string, representing the bit depth of the image
+         */
         abstract String getMetadataBitDepthAttribute();
 
+        /**
+         * Retrieves the metadata attribute name used to represent the width of an image
+         * in the respective image format.
+         *
+         * @return the metadata attribute name as a string, representing the width of the image
+         */
         abstract String getMetadataWidthAttribute();
 
+        /**
+         * Retrieves the metadata attribute name used to represent the height of an image
+         * in the respective image format.
+         *
+         * @return the metadata attribute name as a string, representing the height of the image
+         */
         abstract String getMetadataHeightAttribute();
 
     }
 
+    /**
+     * SaveMode defines the behavior for saving images, providing strategies to either save the image
+     * in its original format or convert it to a specific format such as JPG. Each mode implements its
+     * own logic for determining the target image format and saving the image to a specified file.
+     */
     public enum SaveMode {
 
         AS_IS {
