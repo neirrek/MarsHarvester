@@ -45,6 +45,9 @@ import com.neirrek.harvester.exception.HarvesterException;
  *
  * Thread-safety is assumed by design as property loading and access are restricted
  * to the singleton instance.
+ *
+ * @author Bruno Kerrien
+ *
  */
 public class Config {
 

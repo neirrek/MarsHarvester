@@ -58,6 +58,9 @@ import org.w3c.dom.Element;
  * quality for image conversion.
  *
  * This class implements the Callable interface to be used in a multithreaded environment.
+ *
+ * @author Bruno Kerrien
+ *
  */
 public class ImageDownloader implements Callable<Boolean> {
 

@@ -35,6 +35,9 @@ import java.io.Serial;
  *
  * It can encapsulate a detailed error message and the original cause of the exception,
  * providing better traceability for underlying issues during harvesting operations.
+ *
+ * @author Bruno Kerrien
+ *
  */
 public class HarvesterException extends RuntimeException {
 

@@ -41,6 +41,9 @@ import com.neirrek.harvester.support.ImageDownloader.ImageFormat;
  * raw image URLs, thumbnail URL mappings, and large image URL mappings.
  * Each mission has specific methods for accessing pagination, image count per page, and alternate
  * image URL handling.
+ *
+ * @author Bruno Kerrien
+ *
  */
 public enum Mission {
 
